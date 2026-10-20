@@ -10,6 +10,7 @@ import io.jsonwebtoken.security.Keys;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
@@ -31,7 +32,9 @@ public class JwtTokenProvider {
     private final SsoJwksKeyLocator ssoJwksKeyLocator;
     private SecretKey hrKey;
 
-    private static final String HR_ISSUER = "porest-hr";
+    /** HR 자체 토큰 issuer. 기본값은 옛 이름이고, 새 스택은 JWT_ISSUER 로 바꾼다(스프링 없이 만든 테스트용 초기값 포함). */
+    @Value("${app.jwt.issuer:porest-hr}")
+    private String hrIssuer = "porest-hr";
     private static final String TOKEN_TYPE_CLAIM = "type";
     private static final String TOKEN_TYPE_HR_ACCESS = "hr_access";
 
@@ -149,7 +152,7 @@ public class JwtTokenProvider {
 
         return Jwts.builder()
                 .subject(userId)
-                .issuer(HR_ISSUER)
+                .issuer(hrIssuer)
                 .issuedAt(now)
                 .expiration(expiration)
                 .claim(TOKEN_TYPE_CLAIM, TOKEN_TYPE_HR_ACCESS)
@@ -201,7 +204,7 @@ public class JwtTokenProvider {
 
             // HR JWT인지 확인 (issuer 체크)
             String issuer = claims.getIssuer();
-            return HR_ISSUER.equals(issuer);
+            return hrIssuer.equals(issuer);
         } catch (ExpiredJwtException e) {
             log.warn("HR JWT token expired: {}", e.getMessage());
         } catch (JwtException e) {
@@ -278,7 +281,7 @@ public class JwtTokenProvider {
                     .build()
                     .parseSignedClaims(token)
                     .getPayload();
-            return HR_ISSUER.equals(claims.getIssuer());
+            return hrIssuer.equals(claims.getIssuer());
         } catch (Exception e) {
             return false;
         }

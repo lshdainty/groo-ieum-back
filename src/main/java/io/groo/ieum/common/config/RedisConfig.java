@@ -1,6 +1,7 @@
 package io.groo.ieum.common.config;
 
 import io.groo.ieum.common.event.SsoUserEventSubscriber;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
@@ -16,16 +17,16 @@ import org.springframework.data.redis.listener.adapter.MessageListenerAdapter;
 @Configuration
 public class RedisConfig {
 
-    private static final String USER_EVENT_CHANNEL = "porest:sso:user-events";
-
     @Bean
     public StringRedisTemplate stringRedisTemplate(RedisConnectionFactory connectionFactory) {
         return new StringRedisTemplate(connectionFactory);
     }
 
     @Bean
-    public ChannelTopic userEventTopic() {
-        return new ChannelTopic(USER_EVENT_CHANNEL);
+    public ChannelTopic userEventTopic(
+            // 기본값은 옛 이름이고, 새 스택은 SSO_USER_EVENTS_CHANNEL 로 바꾼다(발행 쪽 sso 와 같아야 한다)
+            @Value("${app.redis.channels.user-events:porest:sso:user-events}") String channel) {
+        return new ChannelTopic(channel);
     }
 
     @Bean

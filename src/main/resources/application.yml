@@ -2,7 +2,7 @@ spring:
   config:
     import: optional:file:.env.${SPRING_PROFILES_ACTIVE:local}[.properties]
   application:
-    name: porest
+    name: ${APP_NAME:porest}
   main:
     allow-bean-definition-overriding: true
   messages:
@@ -136,6 +136,12 @@ file:
 
 # 어플리케이션 정보
 app:
+  # 새 스택(그루)은 JWT_ISSUER · SSO_USER_EVENTS_CHANNEL 로 새 이름을 준다. 기본값은 옛 이름이다.
+  jwt:
+    issuer: ${JWT_ISSUER:porest-hr}
+  redis:
+    channels:
+      user-events: ${SSO_USER_EVENTS_CHANNEL:porest:sso:user-events}
   frontend:
     base-url: ${FRONTEND_BASE_URL}
   company:
@@ -195,7 +201,7 @@ management:
       enabled: true
   metrics:
     tags:
-      application: porest-hr
+      application: ${APP_NAME:porest-hr}
 
 # 배포 버전 (Jenkins 가 git describe 결과를 APP_VERSION 으로 주입)
 # 확인: GET /actuator/info
