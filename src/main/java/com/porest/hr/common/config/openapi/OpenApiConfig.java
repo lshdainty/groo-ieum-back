@@ -20,7 +20,7 @@ public class OpenApiConfig {
                 .info(apiInfo())
                 .servers(List.of(
                         new Server().url("http://localhost:8000").description("로컬 개발 서버"),
-                        new Server().url("https://porest.cloud").description("운영 서버")
+                        new Server().url("https://hangroo.io").description("운영 서버")
                 ))
                 .components(securitySchemes())
                 .addSecurityItem(securityRequirement());
