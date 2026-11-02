@@ -15,7 +15,7 @@ pipeline {
         )
     }
     environment {
-        REPO_URL = "https://github.com/lshdainty/porest-hr-back.git"
+        REPO_URL = "https://github.com/lshdainty/groo-ieum-back.git"
         IMAGE_NAME = "porest-hr-back"
         SRC_DIR = "${env.POREST_BASE_DIR}/src/hr-back"
         ENV_FILE_DEV = "${env.POREST_BASE_DIR}/backend/dev/hr/dev.env"
