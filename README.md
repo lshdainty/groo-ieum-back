@@ -9,11 +9,11 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/lshdainty/porest-hr-back/actions/workflows/ci-main.yml">
-    <img src="https://github.com/lshdainty/porest-hr-back/actions/workflows/ci-main.yml/badge.svg" alt="CI/CD" />
+  <a href="https://github.com/lshdainty/groo-ieum-back/actions/workflows/ci-main.yml">
+    <img src="https://github.com/lshdainty/groo-ieum-back/actions/workflows/ci-main.yml/badge.svg" alt="CI/CD" />
   </a>
-  <a href="https://codecov.io/gh/lshdainty/porest-hr-back">
-    <img src="https://codecov.io/gh/lshdainty/porest-hr-back/branch/main/graph/badge.svg" alt="codecov" />
+  <a href="https://codecov.io/gh/lshdainty/groo-ieum-back">
+    <img src="https://codecov.io/gh/lshdainty/groo-ieum-back/branch/main/graph/badge.svg" alt="codecov" />
   </a>
   <img src="https://img.shields.io/badge/Java-25-007396?logo=openjdk&logoColor=white" alt="Java" />
   <img src="https://img.shields.io/badge/Spring%20Boot-4.0.4-6DB33F?logo=springboot&logoColor=white" alt="Spring Boot" />
@@ -27,7 +27,7 @@
 
 Golang 사용자가 Java Spring Boot를 공부하고자 시작했으며, 기존 사용하던 Legacy 프로그램을 **JPA**, **QueryDSL** 등 실무에서 많이 사용중인 라이브러리를 사용하여 개선하고자 합니다.
 
-인증은 [porest-sso-back](https://github.com/lshdainty/porest-sso-back)에 위임하며, HR은 SSO 토큰(RS256)을 JWKS로 검증한 뒤 자체 JWT(HS256)로 교환하여 사용합니다. 회원가입 완료 등 사용자 이벤트는 Redis Pub/Sub 채널로 수신합니다.
+인증은 [porest-sso-back](https://github.com/lshdainty/groo-sso-back)에 위임하며, HR은 SSO 토큰(RS256)을 JWKS로 검증한 뒤 자체 JWT(HS256)로 교환하여 사용합니다. 회원가입 완료 등 사용자 이벤트는 Redis Pub/Sub 채널로 수신합니다.
 
 ---
 
@@ -187,10 +187,10 @@ src/main/resources/message/
 | Repository | Description |
 |------------|-------------|
 | [그루](https://github.com/lshdainty/groo) | 통합 레포지토리 (서비스 소개) |
-| [porest-hr-front](https://github.com/lshdainty/porest-hr-front) | HR 프론트엔드 |
+| [porest-hr-front](https://github.com/lshdainty/groo-ieum-front) | HR 프론트엔드 |
 | [groo-core](https://github.com/lshdainty/groo-core) | 공통 라이브러리 |
-| [porest-sso-back](https://github.com/lshdainty/porest-sso-back) | SSO 백엔드 |
-| [porest-sso-front](https://github.com/lshdainty/porest-sso-front) | SSO 프론트엔드 |
+| [porest-sso-back](https://github.com/lshdainty/groo-sso-back) | SSO 백엔드 |
+| [porest-sso-front](https://github.com/lshdainty/groo-sso-front) | SSO 프론트엔드 |
 
 ---
 
