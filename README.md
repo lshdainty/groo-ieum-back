@@ -27,7 +27,7 @@
 
 Golang 사용자가 Java Spring Boot를 공부하고자 시작했으며, 기존 사용하던 Legacy 프로그램을 **JPA**, **QueryDSL** 등 실무에서 많이 사용중인 라이브러리를 사용하여 개선하고자 합니다.
 
-인증은 [porest-sso-back](https://github.com/lshdainty/groo-sso-back)에 위임하며, HR은 SSO 토큰(RS256)을 JWKS로 검증한 뒤 자체 JWT(HS256)로 교환하여 사용합니다. 회원가입 완료 등 사용자 이벤트는 Redis Pub/Sub 채널로 수신합니다.
+인증은 [groo-sso-back](https://github.com/lshdainty/groo-sso-back)에 위임하며, HR은 SSO 토큰(RS256)을 JWKS로 검증한 뒤 자체 JWT(HS256)로 교환하여 사용합니다. 회원가입 완료 등 사용자 이벤트는 Redis Pub/Sub 채널로 수신합니다.
 
 ---
 
@@ -63,7 +63,7 @@ Golang 사용자가 Java Spring Boot를 공부하고자 시작했으며, 기존 
 ### 모듈 구조
 
 ```
-porest-hr-back (단일 Gradle 모듈: porest-hr)
+groo-ieum-back (단일 Gradle 모듈: porest-hr)
 └── groo-core   # 공통 라이브러리 (GitHub Packages 의존성)
 ```
 
@@ -187,10 +187,10 @@ src/main/resources/message/
 | Repository | Description |
 |------------|-------------|
 | [그루](https://github.com/lshdainty/groo) | 통합 레포지토리 (서비스 소개) |
-| [porest-hr-front](https://github.com/lshdainty/groo-ieum-front) | HR 프론트엔드 |
+| [groo-ieum-front](https://github.com/lshdainty/groo-ieum-front) | HR 프론트엔드 |
 | [groo-core](https://github.com/lshdainty/groo-core) | 공통 라이브러리 |
-| [porest-sso-back](https://github.com/lshdainty/groo-sso-back) | SSO 백엔드 |
-| [porest-sso-front](https://github.com/lshdainty/groo-sso-front) | SSO 프론트엔드 |
+| [groo-sso-back](https://github.com/lshdainty/groo-sso-back) | SSO 백엔드 |
+| [groo-sso-front](https://github.com/lshdainty/groo-sso-front) | SSO 프론트엔드 |
 
 ---
 
