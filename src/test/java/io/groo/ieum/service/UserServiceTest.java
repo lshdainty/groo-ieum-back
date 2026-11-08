@@ -64,6 +64,8 @@ class UserServiceTest {
     private EntityManager em;
     @Mock
     private BCryptPasswordEncoder passwordEncoder;
+    @Mock
+    private io.groo.ieum.client.sso.SsoApiClient ssoApiClient;
 
     @InjectMocks
     private UserServiceImpl userService;
@@ -83,6 +85,49 @@ class UserServiceTest {
         ReflectionTestUtils.setField(userService, "webUrlPrefix", "/media");
         ReflectionTestUtils.setField(userService, "tempPath", "/var/www/media/temp/profile");
         ReflectionTestUtils.setField(userService, "originPath", "/var/www/media/origin/profile");
+    }
+
+    @Nested
+    @DisplayName("초대 정보 수정")
+    class EditInvitation {
+        private User invitedUser() {
+            User user = createTestUser("invited1", "초대받은이", "invited@test.com");
+            ReflectionTestUtils.setField(user, "ssoUserRowId", 99L);
+            return user;
+        }
+
+        private io.groo.ieum.client.sso.dto.SsoInvitationStatusResponse status(String value) {
+            io.groo.ieum.client.sso.dto.SsoInvitationStatusResponse resp =
+                    new io.groo.ieum.client.sso.dto.SsoInvitationStatusResponse();
+            ReflectionTestUtils.setField(resp, "invitationStatus", value);
+            return resp;
+        }
+
+        @Test
+        @DisplayName("성공 - 대기 중인 초대는 수정된다")
+        void editInvitationSuccessPending() {
+            User user = invitedUser();
+            given(userRepository.findById("invited1")).willReturn(Optional.of(user));
+            given(ssoApiClient.getInvitationStatus(List.of(99L))).willReturn(List.of(status("PENDING")));
+
+            UserServiceDto result = userService.editInvitation("invited1",
+                    UserServiceDto.builder().name("바뀐이름").email("new@test.com").build());
+
+            assertThat(result.getName()).isEqualTo("바뀐이름");
+        }
+
+        @Test
+        @DisplayName("실패 - 이미 가입을 마친 사용자의 초대 수정은 거절한다")
+        void editInvitationFailNotPending() {
+            User user = invitedUser();
+            given(userRepository.findById("invited1")).willReturn(Optional.of(user));
+            given(ssoApiClient.getInvitationStatus(List.of(99L))).willReturn(List.of(status("ACTIVE")));
+
+            assertThatThrownBy(() -> userService.editInvitation("invited1",
+                    UserServiceDto.builder().name("바뀐이름").email("new@test.com").build()))
+                    .isInstanceOf(io.groo.core.exception.InvalidValueException.class);
+            assertThat(user.getName()).isEqualTo("초대받은이");
+        }
     }
 
     @Nested

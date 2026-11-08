@@ -412,6 +412,7 @@ public class UserApiController implements UserApi {
     }
 
     @Override
+    @PreAuthorize("hasAuthority('USER:MANAGE')")
     @AuditAccess(action = AccessAction.UPDATE, targetType = "USER", targetId = "#userId",
             detail = "초대 재발송")
     public ApiResponse resendInvitation(String userId) {
