@@ -276,6 +276,29 @@ class RequestResponseLoggingFilterTest {
         }
 
         @Test
+        @DisplayName("요청 본문의 이메일 · 생년월일이 가려진다 — 사용자 수정 · 초대 본문")
+        void requestEmailAndBirthMasked() throws Exception {
+            mockMvc().perform(post("/echo").contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"user_name\":\"홍길동\",\"user_email\":\"hong@example.com\",\"email\":\"a@example.com\","
+                            + "\"user_birth\":\"1990-01-02\"}")).andReturn();
+
+            String logs = logText();
+            assertThat(logs).doesNotContain("hong@example.com").doesNotContain("a@example.com").doesNotContain("1990-01-02");
+            // 진단에 필요한 비민감 칸은 그대로 남는다
+            assertThat(logs).contains("홍길동");
+        }
+
+        @Test
+        @DisplayName("쿼리스트링의 이메일이 가려진다")
+        void queryEmailMasked() throws Exception {
+            mockMvc().perform(get("/search?email=hong@example.com&keyword=vacation")).andReturn();
+
+            String logs = logText();
+            assertThat(logs).doesNotContain("hong@example.com");
+            assertThat(logs).contains("keyword=vacation");
+        }
+
+        @Test
         @DisplayName("응답 본문의 토큰이 가려진다 — sso 가 빠뜨렸던 경로")
         void responseTokenMasked() throws Exception {
             mockMvc().perform(post("/echo").contentType(MediaType.APPLICATION_JSON)
