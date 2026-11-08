@@ -120,4 +120,34 @@ class VacationReadAccessTest {
             controller.getAllVacationsByApprover("other", 2030, null, me);
         }).doesNotThrowAnyException();
     }
+
+    @Test
+    @DisplayName("거절 - 일반 사용자는 남의 기간별 사용 내역과 전 직원 휴가 기록을 읽지 못한다")
+    void ordinaryUserCannotReadBulk() {
+        loginWith("VACATION:READ");
+        LocalDateTime now = LocalDateTime.of(2030, 1, 1, 0, 0);
+        assertThatThrownBy(() -> controller.getUserVacationUsagesByPeriod("other", now, now, me))
+                .isInstanceOf(ForbiddenException.class);
+        assertThatThrownBy(() -> controller.getAllUsersVacationHistory()).isInstanceOf(ForbiddenException.class);
+        assertThatThrownBy(() -> controller.getVacationUsagesByPeriod(now, now)).isInstanceOf(ForbiddenException.class);
+        verifyNoInteractions(vacationService);
+    }
+
+    @Test
+    @DisplayName("통과 - 본인 기간별 내역, 그리고 관리 · 승인 권한자의 전 직원 기록")
+    void allowedBulk() {
+        LocalDateTime now = LocalDateTime.of(2030, 1, 1, 0, 0);
+        given(vacationService.getUserVacationUsagesByPeriod(anyString(), any(), any())).willReturn(List.of());
+        given(vacationService.getAllUsersVacationHistory()).willReturn(List.of());
+        given(vacationService.getVacationUsagesByPeriod(any(), any())).willReturn(List.of());
+        loginWith("VACATION:READ");
+        assertThatCode(() -> controller.getUserVacationUsagesByPeriod("me", now, now, me)).doesNotThrowAnyException();
+        loginWith("VACATION:APPROVE");
+        assertThatCode(() -> {
+            controller.getAllUsersVacationHistory();
+            controller.getVacationUsagesByPeriod(now, now);
+        }).doesNotThrowAnyException();
+        loginWith("VACATION:MANAGE");
+        assertThatCode(() -> controller.getAllUsersVacationHistory()).doesNotThrowAnyException();
+    }
 }

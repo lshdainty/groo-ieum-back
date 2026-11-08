@@ -106,6 +106,13 @@ public class UserApiController implements UserApi {
         ));
     }
 
+    private boolean hasAuthority(String authority) {
+        org.springframework.security.core.Authentication authentication =
+                org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        return authentication != null
+                && authentication.getAuthorities().stream().anyMatch(auth -> authority.equals(auth.getAuthority()));
+    }
+
     private boolean canReadAnyUser() {
         org.springframework.security.core.Authentication authentication =
                 org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
@@ -128,6 +135,9 @@ public class UserApiController implements UserApi {
     @AuditAccess(action = AccessAction.LIST, targetType = "USER", detail = "전체 사용자 목록")
     public ApiResponse searchUsers() {
         List<UserServiceDto> users = userService.searchUsers();
+
+        // 사용자/권한 관리 권한자는 전체 응답, 그 외에는 화면(달력 · 일정 · 생일 회비 · 회사 통계)이 쓰는 칸만 내린다
+        boolean fullView = canReadAnyUser();
 
         List<UserApiDto.SearchUserResp> resps = users.stream()
                 .map(u -> {
@@ -156,25 +166,25 @@ public class UserApiController implements UserApi {
                     return new UserApiDto.SearchUserResp(
                             u.getId(),
                             u.getName(),
-                            u.getEmail(),
+                            fullView ? u.getEmail() : null,
                             u.getBirth(),
                             u.getWorkTime(),
-                            u.getJoinDate(),
-                            roleDetails,
-                            roleNames,
+                            fullView ? u.getJoinDate() : null,
+                            fullView ? roleDetails : List.of(),
+                            fullView ? roleNames : List.of(),
                             roleNames.isEmpty() ? null : roleNames.get(0),
-                            allPermissions,
+                            fullView ? allPermissions : List.of(),
                             u.getCompany(),
                             getTranslatedName(u.getCompany()),
-                            u.getLunarYN(),
+                            fullView ? u.getLunarYN() : null,
                             u.getProfileUrl(),
                             u.getMainDepartmentNameKR(),
-                            u.getDashboard(),
-                            u.getCountryCode(),
-                            u.getInvitationSentAt(),
-                            u.getInvitationExpiresAt(),
-                            u.getInvitationStatus(),
-                            u.getRegisteredAt()
+                            fullView ? u.getDashboard() : null,
+                            fullView ? u.getCountryCode() : null,
+                            fullView ? u.getInvitationSentAt() : null,
+                            fullView ? u.getInvitationExpiresAt() : null,
+                            fullView ? u.getInvitationStatus() : null,
+                            fullView ? u.getRegisteredAt() : null
                     );
                 })
                 .collect(Collectors.toList());
@@ -293,7 +303,12 @@ public class UserApiController implements UserApi {
      * GET /api/v1/users/{userId}/approvers
      */
     @Override
-    public ApiResponse getUserApprovers(String userId) {
+    public ApiResponse getUserApprovers(String userId, @LoginUser User loginUser) {
+        // 본인의 승인권자이거나 사용자/휴가 관리 권한이 있을 때만 본다
+        if (!loginUser.getId().equals(userId) && !canReadAnyUser() && !hasAuthority("VACATION:MANAGE")) {
+            log.warn("승인권자 조회 거부 - 로그인 유저: {}, 대상 유저: {}", loginUser.getId(), userId);
+            throw new ForbiddenException(HrErrorCode.PERMISSION_DENIED);
+        }
         List<UserServiceDto> approvers = userService.getUserApprovers(userId);
 
         List<UserApiDto.ApproverDetailResp> approverDetails = approvers.stream()

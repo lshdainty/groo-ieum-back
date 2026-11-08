@@ -1,6 +1,8 @@
 package io.groo.ieum.calendar.controller;
 
 import io.groo.core.controller.ApiResponse;
+import io.groo.ieum.security.annotation.LoginUser;
+import io.groo.ieum.user.domain.User;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -29,6 +31,7 @@ public interface CalendarApi {
             @Parameter(description = "시작 날짜 (yyyy-MM-dd'T'HH:mm:ss)", example = "2024-01-01T00:00:00", required = true)
             @RequestParam("startDate") @DateTimeFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss") LocalDateTime startDate,
             @Parameter(description = "종료 날짜 (yyyy-MM-dd'T'HH:mm:ss)", example = "2024-12-31T23:59:59", required = true)
-            @RequestParam("endDate") @DateTimeFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss") LocalDateTime endDate
+            @RequestParam("endDate") @DateTimeFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss") LocalDateTime endDate,
+            @Parameter(hidden = true) @LoginUser User loginUser
     );
 }

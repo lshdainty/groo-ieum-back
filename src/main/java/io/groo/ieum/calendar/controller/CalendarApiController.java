@@ -4,6 +4,8 @@ import io.groo.ieum.calendar.controller.dto.CalendarApiDto;
 import io.groo.core.controller.ApiResponse;
 import io.groo.core.type.DisplayType;
 import io.groo.ieum.schedule.domain.Schedule;
+import io.groo.ieum.security.annotation.LoginUser;
+import io.groo.ieum.user.domain.User;
 import io.groo.ieum.schedule.service.ScheduleService;
 import io.groo.ieum.vacation.service.VacationService;
 import io.groo.ieum.vacation.service.dto.VacationServiceDto;
@@ -11,6 +13,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.MessageSource;
 import org.springframework.context.i18n.LocaleContextHolder;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDateTime;
@@ -26,7 +30,8 @@ public class CalendarApiController implements CalendarApi {
     private final MessageSource messageSource;
 
     @Override
-    public ApiResponse searchEventsByPeriod(LocalDateTime startDate, LocalDateTime endDate) {
+    public ApiResponse searchEventsByPeriod(LocalDateTime startDate, LocalDateTime endDate, @LoginUser User loginUser) {
+        boolean canSeeAllReasons = hasAnyAuthority("VACATION:MANAGE", "VACATION:APPROVE");
         List<CalendarApiDto.searchEventsByPeriodResp> resp = new ArrayList<>();
 
         List<Schedule> schedules = scheduleService.searchSchedulesByPeriod(startDate, endDate);
@@ -52,7 +57,8 @@ public class CalendarApiController implements CalendarApi {
                         v.getUser().getName(),
                         getTranslatedName(v.getTimeType()),
                         v.getTimeType().name(),
-                        v.getDesc(),
+                        // 남의 휴가는 종류만 보이고 사유는 본인 · 휴가 관리 · 휴가 승인 권한자에게만 내린다
+                        canSeeAllReasons || v.getUser().getId().equals(loginUser.getId()) ? v.getDesc() : null,
                         v.getStartDate(),
                         v.getEndDate(),
                         "vacation",
@@ -62,6 +68,15 @@ public class CalendarApiController implements CalendarApi {
                 .toList());
 
         return ApiResponse.success(resp);
+    }
+
+    private boolean hasAnyAuthority(String... authorities) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null) {
+            return false;
+        }
+        List<String> wanted = List.of(authorities);
+        return authentication.getAuthorities().stream().anyMatch(auth -> wanted.contains(auth.getAuthority()));
     }
 
     private String getTranslatedName(DisplayType type) {
