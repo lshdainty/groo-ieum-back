@@ -2,6 +2,7 @@ package io.groo.ieum.schedule.service;
 
 import io.groo.core.exception.BusinessRuleViolationException;
 import io.groo.core.exception.EntityNotFoundException;
+import io.groo.core.exception.ForbiddenException;
 import io.groo.ieum.common.exception.HrErrorCode;
 import io.groo.ieum.common.time.CompanyClock;
 import io.groo.core.exception.InvalidValueException;
@@ -72,8 +73,14 @@ public class ScheduleServiceImpl implements ScheduleService {
 
     @Override
     @Transactional
-    public Long updateSchedule(Long scheduleId, ScheduleServiceDto data) {
+    public Long updateSchedule(Long scheduleId, ScheduleServiceDto data, String loginUserId, boolean canManage) {
         log.debug("일정 수정 시작: scheduleId={}", scheduleId);
+        Schedule target = checkScheduleExist(scheduleId);
+        if (!canManage && (!target.getUser().getId().equals(loginUserId) || !loginUserId.equals(data.getUserId()))) {
+            log.warn("일정 수정 접근 거부 - 로그인 유저: {}, 일정 주인: {}, 변경할 대상: {}",
+                    loginUserId, target.getUser().getId(), data.getUserId());
+            throw new ForbiddenException(HrErrorCode.SCHEDULE_ACCESS_DENIED);
+        }
         // 1. 기존 스케줄 삭제
         deleteSchedule(scheduleId);
 

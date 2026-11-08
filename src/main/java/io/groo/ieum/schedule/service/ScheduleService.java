@@ -1,5 +1,6 @@
 package io.groo.ieum.schedule.service;
 
+import io.groo.core.exception.ForbiddenException;
 import io.groo.ieum.schedule.domain.Schedule;
 import io.groo.ieum.schedule.service.dto.ScheduleServiceDto;
 
@@ -45,10 +46,13 @@ public interface ScheduleService {
      *
      * @param scheduleId 수정할 일정 ID
      * @param data 새로운 일정 정보
+     * @param loginUserId 로그인한 사용자 ID
+     * @param canManage SCHEDULE:MANAGE 권한 여부
      * @return 새로 등록된 일정 ID
      * @throws EntityNotFoundException 일정이 존재하지 않는 경우
+     * @throws ForbiddenException 고칠 일정의 주인이나 새 대상이 로그인 유저가 아닌데 canManage 가 아닌 경우
      */
-    Long updateSchedule(Long scheduleId, ScheduleServiceDto data);
+    Long updateSchedule(Long scheduleId, ScheduleServiceDto data, String loginUserId, boolean canManage);
 
     /**
      * 일정을 삭제합니다.
