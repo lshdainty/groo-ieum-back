@@ -6,6 +6,7 @@ import io.groo.ieum.notice.controller.dto.NoticeApiDto;
 import io.groo.ieum.notice.service.NoticeService;
 import io.groo.ieum.notice.service.dto.NoticeServiceDto;
 import io.groo.ieum.notice.type.NoticeType;
+import io.groo.ieum.user.domain.User;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.MessageSource;
@@ -29,9 +30,10 @@ public class NoticeApiController implements NoticeApi {
 
     @Override
     @PreAuthorize("hasAuthority('NOTICE:MANAGE')")
-    public ApiResponse createNotice(NoticeApiDto.CreateNoticeReq data) {
+    public ApiResponse createNotice(NoticeApiDto.CreateNoticeReq data, User loginUser) {
+        // 작성자는 본문 writer_id 가 아니라 로그인 사용자다 (남의 이름으로 공지 방지)
         Long noticeId = noticeService.createNotice(NoticeServiceDto.builder()
-                .writerId(data.getWriterId())
+                .writerId(loginUser.getId())
                 .title(data.getTitle())
                 .content(data.getContent())
                 .type(data.getNoticeType())
