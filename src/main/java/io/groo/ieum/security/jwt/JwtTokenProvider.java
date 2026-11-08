@@ -177,6 +177,7 @@ public class JwtTokenProvider {
         Date expiration = new Date(now.getTime() + jwtProperties.getHrAccessExpiration());
 
         return Jwts.builder()
+                .id(java.util.UUID.randomUUID().toString())  // jti — 로그아웃 차단 목록의 키
                 .subject(userId)
                 .issuer(HR_ISSUER)
                 .issuedAt(now)
@@ -189,6 +190,13 @@ public class JwtTokenProvider {
                 .claim("permissions", permissions)
                 .signWith(hrKey)
                 .compact();
+    }
+
+    /**
+     * HR 토큰의 jti. 로그아웃 차단 목록 도입 전에 발급된 옛 토큰에는 없어 null 이다.
+     */
+    public String getHrJti(String token) {
+        return getHrClaims(token).getId();
     }
 
     /**

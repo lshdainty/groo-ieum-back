@@ -42,6 +42,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final JwtTokenProvider jwtTokenProvider;
     private final UserService userService;
     private final JwtProperties jwtProperties;
+    private final io.groo.ieum.security.service.TokenRevocationService tokenRevocationService;
 
     private static final String AUTHORIZATION_HEADER = "Authorization";
     private static final String BEARER_PREFIX = "Bearer ";
@@ -60,6 +61,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 Authentication authentication;
 
                 if (jwtTokenProvider.isHrToken(token)) {
+                    // 로그아웃된 토큰(차단 목록의 jti)은 거절한다. jti 없는 옛 토큰은 만료까지 허용.
+                    String jti = jwtTokenProvider.getHrJti(token);
+                    if (jti != null && tokenRevocationService.isRevoked(jti)) {
+                        filterChain.doFilter(request, response);
+                        return;
+                    }
                     // HR JWT인 경우: Claims에서 직접 정보 추출 (DB 조회 없음)
                     authentication = createAuthenticationFromHrToken(token);
 

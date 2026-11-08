@@ -26,6 +26,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.lenient;
 
@@ -44,6 +45,8 @@ class JwtAuthenticationFilterTest {
     private UserService userService;
     @Mock
     private JwtProperties jwtProperties;
+    @Mock
+    private io.groo.ieum.security.service.TokenRevocationService tokenRevocationService;
 
     @InjectMocks
     private JwtAuthenticationFilter filter;
@@ -117,6 +120,48 @@ class JwtAuthenticationFilterTest {
 
             assertThat(response.getHeader("Set-Cookie")).isNull();
             assertThat(SecurityContextHolder.getContext().getAuthentication()).isNotNull();
+        }
+    }
+
+    @Nested
+    @DisplayName("로그아웃 차단 목록")
+    class Revocation {
+
+        @Test
+        @DisplayName("성공 - 로그아웃된 jti 의 토큰은 인증되지 않는다")
+        void revokedTokenRejected() throws Exception {
+            given(jwtTokenProvider.getHrJti(TOKEN)).willReturn("jti-1");
+            given(tokenRevocationService.isRevoked("jti-1")).willReturn(true);
+
+            runFilter();
+
+            assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+        }
+
+        @Test
+        @DisplayName("성공 - jti 없는 옛 토큰은 차단 목록을 보지 않고 만료까지 허용한다")
+        void tokenWithoutJtiAllowed() throws Exception {
+            given(jwtTokenProvider.getHrJti(TOKEN)).willReturn(null);
+            given(jwtTokenProvider.getRemainingExpiration(TOKEN)).willReturn(1_800_000L);
+
+            runFilter();
+
+            assertThat(SecurityContextHolder.getContext().getAuthentication()).isNotNull();
+            org.mockito.Mockito.verify(tokenRevocationService, org.mockito.Mockito.never()).isRevoked(anyString());
+        }
+
+        @Test
+        @DisplayName("성공 - 차단되지 않은 jti 는 정상 인증 (갱신 시 옛 jti 는 차단하지 않는다)")
+        void liveJtiAllowed() throws Exception {
+            given(jwtTokenProvider.getHrJti(TOKEN)).willReturn("jti-2");
+            given(tokenRevocationService.isRevoked("jti-2")).willReturn(false);
+            given(jwtTokenProvider.getRemainingExpiration(TOKEN)).willReturn(1_800_000L);
+
+            runFilter();
+
+            assertThat(SecurityContextHolder.getContext().getAuthentication()).isNotNull();
+            org.mockito.Mockito.verify(tokenRevocationService, org.mockito.Mockito.never())
+                    .revoke(anyString(), org.mockito.ArgumentMatchers.anyLong());
         }
     }
 
