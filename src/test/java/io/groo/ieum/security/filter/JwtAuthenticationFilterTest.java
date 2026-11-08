@@ -52,14 +52,14 @@ class JwtAuthenticationFilterTest {
     @BeforeEach
     void setUpHrTokenAuth() {
         // 유효한 HR 토큰으로 인증되는 공통 경로 — 각 테스트는 잔여 수명만 바꾼다.
-        given(jwtTokenProvider.validateToken(TOKEN)).willReturn(true);
-        given(jwtTokenProvider.isHrToken(TOKEN)).willReturn(true);
-        given(jwtTokenProvider.getUserId(TOKEN)).willReturn("user1");
-        given(jwtTokenProvider.getSsoUserRowIdFromHrToken(TOKEN)).willReturn(7L);
-        given(jwtTokenProvider.getNameFromHrToken(TOKEN)).willReturn("사용자");
-        given(jwtTokenProvider.getEmailFromHrToken(TOKEN)).willReturn("user1@test.com");
-        given(jwtTokenProvider.getRolesFromHrToken(TOKEN)).willReturn(List.of("ROLE_USER"));
-        given(jwtTokenProvider.getPermissionsFromHrToken(TOKEN)).willReturn(List.of());
+        lenient().when(jwtTokenProvider.validateToken(TOKEN)).thenReturn(true);
+        lenient().when(jwtTokenProvider.isHrToken(TOKEN)).thenReturn(true);
+        lenient().when(jwtTokenProvider.getUserId(TOKEN)).thenReturn("user1");
+        lenient().when(jwtTokenProvider.getSsoUserRowIdFromHrToken(TOKEN)).thenReturn(7L);
+        lenient().when(jwtTokenProvider.getNameFromHrToken(TOKEN)).thenReturn("사용자");
+        lenient().when(jwtTokenProvider.getEmailFromHrToken(TOKEN)).thenReturn("user1@test.com");
+        lenient().when(jwtTokenProvider.getRolesFromHrToken(TOKEN)).thenReturn(List.of("ROLE_USER"));
+        lenient().when(jwtTokenProvider.getPermissionsFromHrToken(TOKEN)).thenReturn(List.of());
         // 갱신 분기에서만 쓰이는 스텁 — 비갱신 테스트에서는 호출되지 않는다.
         lenient().when(jwtProperties.getHrAccessExpiration()).thenReturn(3_600_000L);
         lenient().when(jwtTokenProvider.createHrAccessToken(
@@ -126,6 +126,50 @@ class JwtAuthenticationFilterTest {
             MockHttpServletResponse response = runFilter();
 
             assertThat(response.getHeader("Set-Cookie")).isNull();
+        }
+    }
+
+    @Nested
+    @DisplayName("HR 서명이 아닌 SSO 토큰이 오면")
+    class WhenSsoToken {
+
+        private static final String SSO = "sso-jwt";
+
+        private MockHttpServletResponse run() throws Exception {
+            MockHttpServletRequest request = new MockHttpServletRequest();
+            request.setCookies(new Cookie("hr_access_token", SSO));
+            MockHttpServletResponse response = new MockHttpServletResponse();
+            filter.doFilter(request, response, new MockFilterChain());
+            return response;
+        }
+
+        @Test
+        @DisplayName("성공 - access/hr 대상이면 인증된다")
+        void acceptsAccess() throws Exception {
+            given(jwtTokenProvider.validateToken(SSO)).willReturn(true);
+            given(jwtTokenProvider.isHrToken(SSO)).willReturn(false);
+            given(jwtTokenProvider.isSsoAccessTokenForHr(SSO)).willReturn(true);
+            given(jwtTokenProvider.getUserId(SSO)).willReturn("user1");
+            io.groo.ieum.user.domain.User user = org.mockito.Mockito.mock(io.groo.ieum.user.domain.User.class);
+            given(user.getAllAuthorities()).willReturn(List.of("ROLE_USER"));
+            given(userService.findUserById("user1")).willReturn(user);
+
+            run();
+
+            assertThat(SecurityContextHolder.getContext().getAuthentication()).isNotNull();
+        }
+
+        @Test
+        @DisplayName("실패 - refresh 등 access 가 아니면 인증되지 않는다")
+        void rejectsNonAccess() throws Exception {
+            given(jwtTokenProvider.validateToken(SSO)).willReturn(true);
+            given(jwtTokenProvider.isHrToken(SSO)).willReturn(false);
+            given(jwtTokenProvider.isSsoAccessTokenForHr(SSO)).willReturn(false);
+
+            run();
+
+            assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+            org.mockito.Mockito.verifyNoInteractions(userService);
         }
     }
 }
