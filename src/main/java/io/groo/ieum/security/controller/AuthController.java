@@ -6,19 +6,16 @@ import io.groo.core.exception.UnauthorizedException;
 import io.groo.core.type.YNType;
 import io.groo.ieum.security.controller.dto.AuthApiDto;
 import io.groo.ieum.security.principal.UserPrincipal;
-import io.groo.ieum.security.service.IpBlacklistService;
 import io.groo.ieum.user.domain.User;
 import io.groo.ieum.user.service.UserService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.annotation.Profile;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.util.StringUtils;
 
 import java.util.List;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 import io.groo.ieum.permission.domain.Role;
@@ -26,7 +23,7 @@ import org.springframework.web.bind.annotation.*;
 
 /**
  * 인증/보안 API 컨트롤러
- * JWT 토큰으로 인증된 사용자 정보 조회 및 IP 블랙리스트 관리를 담당합니다.
+ * JWT 토큰으로 인증된 사용자 정보 조회를 담당합니다.
  */
 @RestController
 @RequiredArgsConstructor
@@ -34,7 +31,6 @@ import org.springframework.web.bind.annotation.*;
 @Tag(name = "Auth", description = "인증/보안 API")
 public class AuthController implements AuthApi {
     private final UserService userService;
-    private final IpBlacklistService ipBlacklistService;
 
     @Override
     public ApiResponse<AuthApiDto.LoginUserInfo> getUserInfo() {
@@ -94,38 +90,5 @@ public class AuthController implements AuthApi {
                 result.getUserRoles(), result.getPermissions(), result.getProfileUrl());
 
         return ApiResponse.success(result);
-    }
-
-    // ========== IP 블랙리스트 관리 (개발 환경 전용) ==========
-
-    @Override
-    @Profile({"local", "dev"})
-    public ApiResponse<Set<String>> getRuntimeBlacklist() {
-        Set<String> blacklist = ipBlacklistService.getRuntimeBlacklist();
-        log.info("Runtime blacklist retrieved: {} IPs", blacklist.size());
-        return ApiResponse.success(blacklist);
-    }
-
-    @Override
-    @Profile({"local", "dev"})
-    public ApiResponse<String> addToBlacklist(String ip) {
-        ipBlacklistService.addToBlacklist(ip);
-        log.warn("⚠️ IP manually added to blacklist: {}", ip);
-        return ApiResponse.success("IP " + ip + " has been added to blacklist");
-    }
-
-    @Override
-    @Profile({"local", "dev"})
-    public ApiResponse<String> removeFromBlacklist(String ip) {
-        ipBlacklistService.removeFromBlacklist(ip);
-        log.info("IP removed from blacklist: {}", ip);
-        return ApiResponse.success("IP " + ip + " has been removed from blacklist");
-    }
-
-    @Override
-    @Profile({"local", "dev"})
-    public ApiResponse<Boolean> checkIpStatus(String ip) {
-        boolean isBlocked = ipBlacklistService.isBlocked(ip);
-        return ApiResponse.success(isBlocked);
     }
 }

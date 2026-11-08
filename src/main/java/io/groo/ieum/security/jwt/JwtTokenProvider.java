@@ -34,6 +34,9 @@ public class JwtTokenProvider {
     private static final String HR_ISSUER = "porest-hr";
     private static final String TOKEN_TYPE_CLAIM = "type";
     private static final String TOKEN_TYPE_HR_ACCESS = "hr_access";
+    private static final String SSO_TOKEN_TYPE_ACCESS = "access";
+    private static final String SSO_AUDIENCE = "porest-services";
+    private static final String HR_SERVICE_CODE = "hr";
 
     @PostConstruct
     public void init() {
@@ -69,6 +72,32 @@ public class JwtTokenProvider {
             log.warn("SSO JWT token is empty: {}", e.getMessage());
         }
         return false;
+    }
+
+    /**
+     * HR API 의 Bearer 로 쓸 수 있는 SSO 토큰인지 검사한다 (서명 검증 포함).
+     * SSO 는 같은 키로 access · refresh · service · link_ticket · reauth 를 모두 서명하므로
+     * 서명만으로는 부족하다. type=access, aud 에 SSO 대상(porest-services), services 에 HR(hr) 가
+     * 모두 있어야 통과한다. 값은 groo-sso-back JwtTokenProvider 가 access 토큰에 넣는 값이다.
+     */
+    public boolean isSsoAccessTokenForHr(String token) {
+        try {
+            return isSsoAccessClaimsForHr(getSsoClaims(token));
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    static boolean isSsoAccessClaimsForHr(Claims claims) {
+        if (!SSO_TOKEN_TYPE_ACCESS.equals(claims.get(TOKEN_TYPE_CLAIM, String.class))) {
+            return false;
+        }
+        java.util.Set<String> aud = claims.getAudience();
+        if (aud == null || !aud.contains(SSO_AUDIENCE)) {
+            return false;
+        }
+        Object services = claims.get("services");
+        return services instanceof java.util.Collection<?> c && c.contains(HR_SERVICE_CODE);
     }
 
     /**

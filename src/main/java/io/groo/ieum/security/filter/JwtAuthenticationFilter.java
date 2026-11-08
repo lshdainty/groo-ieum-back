@@ -68,6 +68,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     renewIfExpiringSoon(token, response);
                 } else {
                     // SSO JWT인 경우: HR DB 조회 필요 (하위 호환성 유지)
+                    // access 토큰 + 대상(aud) + HR 접근(services) 인 것만 받는다.
+                    // refresh · service · link_ticket · reauth 등 같은 키로 서명된 다른 종류는 거른다.
+                    if (!jwtTokenProvider.isSsoAccessTokenForHr(token)) {
+                        log.warn("SSO JWT 거부: access 토큰이 아니거나 HR 대상이 아님");
+                        filterChain.doFilter(request, response);
+                        return;
+                    }
                     authentication = createAuthenticationFromSsoToken(token);
                 }
 
