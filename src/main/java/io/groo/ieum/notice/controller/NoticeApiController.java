@@ -28,6 +28,13 @@ public class NoticeApiController implements NoticeApi {
     private final NoticeService noticeService;
     private final MessageSource messageSource;
 
+    /** 한 번에 가져올 수 있는 공지 수 상한. 웹은 최대 50 을 쓴다. */
+    static final int MAX_PAGE_SIZE = 100;
+
+    private static Pageable pageRequest(int page, int size) {
+        return PageRequest.of(page, Math.min(size, MAX_PAGE_SIZE));
+    }
+
     @Override
     @PreAuthorize("hasAuthority('NOTICE:MANAGE')")
     public ApiResponse createNotice(NoticeApiDto.CreateNoticeReq data, User loginUser) {
@@ -71,7 +78,7 @@ public class NoticeApiController implements NoticeApi {
     @Override
     @PreAuthorize("hasAuthority('NOTICE:READ')")
     public ApiResponse searchNotices(int page, int size) {
-        Pageable pageable = PageRequest.of(page, size);
+        Pageable pageable = pageRequest(page, size);
         Page<NoticeServiceDto> noticePage = noticeService.searchNotices(pageable);
 
         return ApiResponse.success(buildPageResponse(noticePage));
@@ -80,7 +87,7 @@ public class NoticeApiController implements NoticeApi {
     @Override
     @PreAuthorize("hasAuthority('NOTICE:READ')")
     public ApiResponse searchNoticesByType(NoticeType type, int page, int size) {
-        Pageable pageable = PageRequest.of(page, size);
+        Pageable pageable = pageRequest(page, size);
         Page<NoticeServiceDto> noticePage = noticeService.searchNoticesByType(type, pageable);
 
         return ApiResponse.success(buildPageResponse(noticePage));
@@ -89,7 +96,7 @@ public class NoticeApiController implements NoticeApi {
     @Override
     @PreAuthorize("hasAuthority('NOTICE:READ')")
     public ApiResponse searchNoticesByKeyword(String keyword, int page, int size) {
-        Pageable pageable = PageRequest.of(page, size);
+        Pageable pageable = pageRequest(page, size);
         Page<NoticeServiceDto> noticePage = noticeService.searchNoticesByKeyword(keyword, pageable);
 
         return ApiResponse.success(buildPageResponse(noticePage));
@@ -98,7 +105,7 @@ public class NoticeApiController implements NoticeApi {
     @Override
     @PreAuthorize("hasAuthority('NOTICE:READ')")
     public ApiResponse searchActiveNotices(int page, int size) {
-        Pageable pageable = PageRequest.of(page, size);
+        Pageable pageable = pageRequest(page, size);
         Page<NoticeServiceDto> noticePage = noticeService.searchActiveNotices(pageable);
 
         return ApiResponse.success(buildPageResponse(noticePage));
@@ -107,7 +114,7 @@ public class NoticeApiController implements NoticeApi {
     @Override
     @PreAuthorize("hasAuthority('NOTICE:READ')")
     public ApiResponse searchPinnedNotices(int page, int size) {
-        Pageable pageable = PageRequest.of(page, size);
+        Pageable pageable = pageRequest(page, size);
         Page<NoticeServiceDto> noticePage = noticeService.searchPinnedNotices(pageable);
 
         return ApiResponse.success(buildPageResponse(noticePage));

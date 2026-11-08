@@ -4,6 +4,7 @@ import tools.jackson.databind.PropertyNamingStrategies;
 import tools.jackson.databind.annotation.JsonNaming;
 import io.groo.ieum.work.type.CodeType;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -59,6 +60,7 @@ public class WorkApiDto {
     @Schema(description = "업무 내역 일괄 등록 요청")
     public static class BulkCreateWorkHistoryReq {
         @Schema(description = "업무 내역 목록")
+        @Size(max = 500)
         private List<CreateWorkHistoryReq> workHistories;
     }
 

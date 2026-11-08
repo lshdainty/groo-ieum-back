@@ -6,6 +6,7 @@ import io.groo.core.type.CountryCode;
 import io.groo.core.type.YNType;
 import io.groo.ieum.holiday.type.HolidayType;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -217,6 +218,7 @@ public class HolidayApiDto {
     @Schema(description = "공휴일 일괄 저장 요청")
     public static class BulkSaveHolidaysReq {
         @Schema(description = "저장할 공휴일 목록")
+        @Size(max = 1000)
         private List<BulkSaveHolidayItem> holidays;
     }
 
