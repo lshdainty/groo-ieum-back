@@ -181,9 +181,55 @@ class WorkHistoryServiceTest {
         }
     }
 
+    private WorkHistoryServiceDto createDto(String userId) {
+        return WorkHistoryServiceDto.builder()
+                .date(LocalDate.now())
+                .userId(userId)
+                .groupCode("GROUP")
+                .partCode("PART")
+                .classCode("DIVISION")
+                .hours(new BigDecimal("4.0000"))
+                .content("업무")
+                .build();
+    }
+
+    private void stubCodes(String... userIds) {
+        WorkCode group = createTestWorkCode(1L, "GROUP", "그룹", CodeType.LABEL);
+        WorkCode part = createTestWorkCode(2L, "PART", "파트", CodeType.OPTION);
+        WorkCode division = createTestWorkCode(3L, "DIVISION", "분류", CodeType.OPTION);
+        for (String id : userIds) {
+            given(userService.checkUserExist(id)).willReturn(createTestUser(id));
+        }
+        given(workCodeRepository.findByCode("GROUP")).willReturn(Optional.of(group));
+        given(workCodeRepository.findByCode("PART")).willReturn(Optional.of(part));
+        given(workCodeRepository.findByCode("DIVISION")).willReturn(Optional.of(division));
+    }
+
+    private void assertDenied(org.assertj.core.api.ThrowableAssert.ThrowingCallable call) {
+        assertThatThrownBy(call)
+                .isInstanceOf(ForbiddenException.class)
+                .extracting(e -> ((ForbiddenException) e).getErrorCode().getCode())
+                .isEqualTo("PERMISSION_001");
+    }
+
     @Nested
     @DisplayName("업무 이력 생성")
     class CreateWorkHistory {
+        @Test
+        @DisplayName("실패 - 남의 이름으로 WORK:MANAGE 없이 만들면 403 이고 저장하지 않는다")
+        void createWorkHistoryFailNotOwner() {
+            assertDenied(() -> workHistoryService.createWorkHistory(createDto("user1"), "user2", false));
+            then(workHistoryRepository).should(never()).save(any(WorkHistory.class));
+        }
+
+        @Test
+        @DisplayName("성공 - WORK:MANAGE 가 있으면 남의 이름으로도 만들어진다")
+        void createWorkHistorySuccessByManager() {
+            stubCodes("user1");
+            workHistoryService.createWorkHistory(createDto("user1"), "admin", true);
+            then(workHistoryRepository).should().save(any(WorkHistory.class));
+        }
+
         @Test
         @DisplayName("성공 - 업무 이력이 생성된다")
         void createWorkHistorySuccess() {
@@ -211,7 +257,7 @@ class WorkHistoryServiceTest {
             willDoNothing().given(workHistoryRepository).save(any(WorkHistory.class));
 
             // when
-            Long result = workHistoryService.createWorkHistory(dto);
+            Long result = workHistoryService.createWorkHistory(dto, "user1", false);
 
             // then
             then(workHistoryRepository).should().save(any(WorkHistory.class));
@@ -238,7 +284,7 @@ class WorkHistoryServiceTest {
             given(workCodeRepository.findByCode("NONEXISTENT")).willReturn(Optional.empty());
 
             // when & then
-            assertThatThrownBy(() -> workHistoryService.createWorkHistory(dto))
+            assertThatThrownBy(() -> workHistoryService.createWorkHistory(dto, "user1", false))
                     .isInstanceOf(EntityNotFoundException.class);
         }
 
@@ -262,7 +308,7 @@ class WorkHistoryServiceTest {
             given(userService.checkUserExist(userId)).willReturn(user);
 
             // when & then
-            assertThatThrownBy(() -> workHistoryService.createWorkHistory(dto))
+            assertThatThrownBy(() -> workHistoryService.createWorkHistory(dto, "user1", false))
                     .isInstanceOf(InvalidValueException.class);
         }
     }
@@ -270,6 +316,30 @@ class WorkHistoryServiceTest {
     @Nested
     @DisplayName("업무 이력 일괄 생성")
     class CreateWorkHistories {
+        @Test
+        @DisplayName("실패 - 내 줄에 남의 줄이 섞이면 WORK:MANAGE 없이는 전체 거절이고 저장 호출이 없다")
+        void createWorkHistoriesFailMixedNotOwner() {
+            List<WorkHistoryServiceDto> list = List.of(createDto("user2"), createDto("user1"), createDto("user2"));
+            assertDenied(() -> workHistoryService.createWorkHistories(list, "user2", false));
+            then(workHistoryRepository).should(never()).saveAll(any());
+        }
+
+        @Test
+        @DisplayName("성공 - 내 줄만이면 WORK:MANAGE 없이도 저장된다")
+        void createWorkHistoriesSuccessAllOwn() {
+            stubCodes("user2");
+            workHistoryService.createWorkHistories(List.of(createDto("user2"), createDto("user2")), "user2", false);
+            then(workHistoryRepository).should().saveAll(any());
+        }
+
+        @Test
+        @DisplayName("성공 - WORK:MANAGE 가 있으면 섞인 줄도 전체 저장된다")
+        void createWorkHistoriesSuccessMixedByManager() {
+            stubCodes("user1", "user2");
+            workHistoryService.createWorkHistories(List.of(createDto("user1"), createDto("user2")), "admin", true);
+            then(workHistoryRepository).should().saveAll(any());
+        }
+
         @Test
         @DisplayName("성공 - 업무 이력이 일괄 생성된다")
         void createWorkHistoriesSuccess() {
@@ -307,7 +377,7 @@ class WorkHistoryServiceTest {
             willDoNothing().given(workHistoryRepository).saveAll(any());
 
             // when
-            List<Long> result = workHistoryService.createWorkHistories(List.of(dto1, dto2));
+            List<Long> result = workHistoryService.createWorkHistories(List.of(dto1, dto2), "user1", false);
 
             // then
             then(workHistoryRepository).should().saveAll(any());
@@ -694,7 +764,7 @@ class WorkHistoryServiceTest {
             willDoNothing().given(workHistoryRepository).saveAll(any());
 
             // when
-            List<Long> result = workHistoryService.createWorkHistories(emptyList);
+            List<Long> result = workHistoryService.createWorkHistories(emptyList, "user1", false);
 
             // then
             assertThat(result).isEmpty();
@@ -796,7 +866,7 @@ class WorkHistoryServiceTest {
             given(workCodeRepository.findByCode("NONEXISTENT_PART")).willReturn(Optional.empty());
 
             // when & then
-            assertThatThrownBy(() -> workHistoryService.createWorkHistory(dto))
+            assertThatThrownBy(() -> workHistoryService.createWorkHistory(dto, "user1", false))
                     .isInstanceOf(EntityNotFoundException.class);
         }
 
@@ -825,7 +895,7 @@ class WorkHistoryServiceTest {
             given(workCodeRepository.findByCode("NONEXISTENT_DIVISION")).willReturn(Optional.empty());
 
             // when & then
-            assertThatThrownBy(() -> workHistoryService.createWorkHistory(dto))
+            assertThatThrownBy(() -> workHistoryService.createWorkHistory(dto, "user1", false))
                     .isInstanceOf(EntityNotFoundException.class);
         }
     }

@@ -17,18 +17,26 @@ public interface WorkHistoryService {
     /**
      * 업무 이력 생성
      *
+     * 담당자가 로그인 유저가 아니면 canManage 일 때만 허용한다.
+     *
      * @param data 업무 이력 데이터
+     * @param loginUserId 로그인한 사용자 ID
+     * @param canManage WORK:MANAGE 권한 여부
      * @return 생성된 업무 이력 id
      */
-    Long createWorkHistory(WorkHistoryServiceDto data);
+    Long createWorkHistory(WorkHistoryServiceDto data, String loginUserId, boolean canManage);
 
     /**
      * 업무 이력 일괄 생성
      *
+     * 남의 줄이 하나라도 섞여 있으면 canManage 가 아닐 때 전체를 거절한다(일부만 저장하지 않는다).
+     *
      * @param dataList 업무 이력 데이터 리스트
+     * @param loginUserId 로그인한 사용자 ID
+     * @param canManage WORK:MANAGE 권한 여부
      * @return 생성된 업무 이력 id 리스트
      */
-    List<Long> createWorkHistories(List<WorkHistoryServiceDto> dataList);
+    List<Long> createWorkHistories(List<WorkHistoryServiceDto> dataList, String loginUserId, boolean canManage);
 
     /**
      * 업무 이력 목록 조회

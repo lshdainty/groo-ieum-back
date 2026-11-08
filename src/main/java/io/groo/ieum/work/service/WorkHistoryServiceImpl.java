@@ -64,7 +64,8 @@ public class WorkHistoryServiceImpl implements WorkHistoryService {
 
     @Override
     @Transactional
-    public Long createWorkHistory(WorkHistoryServiceDto data) {
+    public Long createWorkHistory(WorkHistoryServiceDto data, String loginUserId, boolean canManage) {
+        validateCreateOwner(data, loginUserId, canManage);
         log.debug("업무 이력 생성 시작: userId={}, date={}", data.getUserId(), data.getDate());
         User user = userService.checkUserExist(data.getUserId());
         WorkCode group = checkWorkCodeExist(data.getGroupCode());
@@ -86,7 +87,8 @@ public class WorkHistoryServiceImpl implements WorkHistoryService {
 
     @Override
     @Transactional
-    public List<Long> createWorkHistories(List<WorkHistoryServiceDto> dataList) {
+    public List<Long> createWorkHistories(List<WorkHistoryServiceDto> dataList, String loginUserId, boolean canManage) {
+        dataList.forEach(data -> validateCreateOwner(data, loginUserId, canManage));
         log.debug("업무 이력 일괄 생성 시작: count={}", dataList.size());
         List<WorkHistory> workHistories = dataList.stream().map(data -> {
             User user = userService.checkUserExist(data.getUserId());
@@ -190,6 +192,16 @@ public class WorkHistoryServiceImpl implements WorkHistoryService {
         validateWorkHistoryOwnership(workHistory, loginUserId, canManage);
         workHistoryRepository.delete(workHistory);
         log.info("업무 이력 삭제 완료: id={}", id);
+    }
+
+    /**
+     * 만들 기록의 담당자가 로그인 유저가 아니면 WORK:MANAGE 권한이 있을 때만 허용
+     */
+    private void validateCreateOwner(WorkHistoryServiceDto data, String loginUserId, boolean canManage) {
+        if (!canManage && !loginUserId.equals(data.getUserId())) {
+            log.warn("업무 이력 생성 접근 거부 - 로그인 유저: {}, 담당자: {}", loginUserId, data.getUserId());
+            throw new ForbiddenException(HrErrorCode.PERMISSION_DENIED);
+        }
     }
 
     /**

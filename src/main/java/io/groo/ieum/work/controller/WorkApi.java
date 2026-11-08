@@ -46,7 +46,8 @@ public interface WorkApi {
                     required = true,
                     content = @Content(schema = @Schema(implementation = WorkApiDto.CreateWorkHistoryReq.class))
             )
-            @Valid @RequestBody WorkApiDto.CreateWorkHistoryReq data
+            @Valid @RequestBody WorkApiDto.CreateWorkHistoryReq data,
+            @Parameter(hidden = true) @LoginUser User loginUser
     );
 
     @Operation(
@@ -71,7 +72,8 @@ public interface WorkApi {
                     required = true,
                     content = @Content(schema = @Schema(implementation = WorkApiDto.BulkCreateWorkHistoryReq.class))
             )
-            @Valid @RequestBody WorkApiDto.BulkCreateWorkHistoryReq data
+            @Valid @RequestBody WorkApiDto.BulkCreateWorkHistoryReq data,
+            @Parameter(hidden = true) @LoginUser User loginUser
     );
 
     @Operation(

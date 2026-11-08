@@ -37,7 +37,7 @@ public class WorkApiController implements WorkApi {
 
     @Override
     @PreAuthorize("hasAuthority('WORK:WRITE')")
-    public ApiResponse createWorkHistory(WorkApiDto.CreateWorkHistoryReq data) {
+    public ApiResponse createWorkHistory(WorkApiDto.CreateWorkHistoryReq data, User loginUser) {
         Long workHistoryId = workHistoryService.createWorkHistory(WorkHistoryServiceDto.builder()
                 .date(data.getWorkDate())
                 .userId(data.getWorkUserId())
@@ -46,13 +46,13 @@ public class WorkApiController implements WorkApi {
                 .classCode(data.getWorkClassCode())
                 .hours(data.getWorkHour())
                 .content(data.getWorkContent())
-                .build());
+                .build(), loginUser.getId(), hasWorkManageAuthority());
         return ApiResponse.success(new WorkApiDto.CreateWorkHistoryResp(workHistoryId));
     }
 
     @Override
     @PreAuthorize("hasAuthority('WORK:WRITE')")
-    public ApiResponse createWorkHistories(WorkApiDto.BulkCreateWorkHistoryReq data) {
+    public ApiResponse createWorkHistories(WorkApiDto.BulkCreateWorkHistoryReq data, User loginUser) {
         List<WorkHistoryServiceDto> dtos = data.getWorkHistories().stream()
                 .map(req -> WorkHistoryServiceDto.builder()
                         .date(req.getWorkDate())
@@ -65,7 +65,7 @@ public class WorkApiController implements WorkApi {
                         .build())
                 .collect(Collectors.toList());
 
-        List<Long> workHistoryIds = workHistoryService.createWorkHistories(dtos);
+        List<Long> workHistoryIds = workHistoryService.createWorkHistories(dtos, loginUser.getId(), hasWorkManageAuthority());
         return ApiResponse.success(new WorkApiDto.BulkCreateWorkHistoryResp(workHistoryIds));
     }
 
