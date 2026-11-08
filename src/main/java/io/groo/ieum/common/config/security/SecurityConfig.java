@@ -3,6 +3,7 @@ package io.groo.ieum.common.config.security;
 import io.groo.ieum.common.config.properties.AppProperties;
 import io.groo.ieum.security.filter.IpBlockFilter;
 import io.groo.ieum.security.filter.JwtAuthenticationFilter;
+import io.groo.ieum.security.filter.OriginCheckFilter;
 import io.groo.ieum.security.handler.CustomAuthenticationEntryPoint;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
@@ -34,6 +35,7 @@ public class SecurityConfig {
     private final CustomAuthenticationEntryPoint customAuthenticationEntryPoint;
     private final AppProperties appProperties;
     private final IpBlockFilter ipBlockFilter;
+    private final OriginCheckFilter originCheckFilter;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -80,6 +82,8 @@ public class SecurityConfig {
         // 필터 순서 설정
         // IP 블랙리스트 필터 → JWT 인증 필터 → 기타 필터
         http.addFilterBefore(ipBlockFilter, UsernamePasswordAuthenticationFilter.class);
+        // 쿠키 인증 + 상태 변경 요청은 Origin(없으면 Referer)이 허용 오리진인지 본다(S-5)
+        http.addFilterBefore(originCheckFilter, UsernamePasswordAuthenticationFilter.class);
         http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
@@ -90,9 +94,7 @@ public class SecurityConfig {
         CorsConfiguration configuration = new CorsConfiguration();
 
         // 허용 Origin 설정
-        configuration.setAllowedOrigins(List.of(
-                appProperties.getFrontend().getBaseUrl()
-        ));
+        configuration.setAllowedOrigins(appProperties.getFrontend().allowedOrigins());
 
         // 허용 HTTP 메서드
         configuration.setAllowedMethods(Arrays.asList(

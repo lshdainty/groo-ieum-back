@@ -5,6 +5,8 @@ import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
+
 @Getter
 @Setter
 @Component
@@ -18,6 +20,13 @@ public class AppProperties {
     @Setter
     public static class Frontend {
         private String baseUrl;
+
+        /**
+         * 브라우저가 이 API 를 부를 수 있는 오리진 목록. CORS 설정과 Origin 검사 필터가 같은 값을 쓴다.
+         */
+        public List<String> allowedOrigins() {
+            return List.of(baseUrl);
+        }
     }
 
     @Getter
