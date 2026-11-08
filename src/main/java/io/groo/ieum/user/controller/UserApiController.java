@@ -383,6 +383,7 @@ public class UserApiController implements UserApi {
     }
 
     @Override
+    @PreAuthorize("hasAuthority('USER:MANAGE')")
     @AuditAccess(action = AccessAction.UPDATE, targetType = "USER", targetId = "#userId",
             detail = "초대 정보 수정")
     public ApiResponse editInvitation(String userId, UserApiDto.EditInvitationReq data) {

@@ -20,4 +20,11 @@ class UserApiAuthorizationTest {
         assertThat(preAuthorize("inviteUser", UserApiDto.InviteUserReq.class))
                 .isEqualTo("hasAuthority('USER:MANAGE')");
     }
+
+    @Test
+    @DisplayName("초대 정보 수정은 USER:MANAGE 가 있어야 한다")
+    void editInvitationRequiresUserManage() throws Exception {
+        assertThat(preAuthorize("editInvitation", String.class, UserApiDto.EditInvitationReq.class))
+                .isEqualTo("hasAuthority('USER:MANAGE')");
+    }
 }
