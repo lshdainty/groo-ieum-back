@@ -167,7 +167,7 @@ public class UserApiController implements UserApi {
     @Override
     @PreAuthorize("hasAuthority('USER:EDIT')")
     @AuditAccess(action = AccessAction.UPDATE, targetType = "USER", targetId = "#userId")
-    public ApiResponse editUser(String userId, UserApiDto.EditUserReq data) {
+    public ApiResponse editUser(String userId, UserApiDto.EditUserReq data, User loginUser) {
         userService.editUser(UserServiceDto.builder()
                 .id(userId)
                 .name(data.getUserName())
@@ -181,7 +181,9 @@ public class UserApiController implements UserApi {
                 .profileUUID(data.getProfileUuid())
                 .dashboard(data.getDashboard())
                 .countryCode(data.getCountryCode())
-                .build()
+                .build(),
+                loginUser.getId(),
+                hasUserManageAuthority()
         );
 
         UserServiceDto findUser = userService.searchUser(userId);
@@ -324,6 +326,20 @@ public class UserApiController implements UserApi {
                 maxAvailableCount,
                 isAutoApproval
         ));
+    }
+
+    /**
+     * 현재 사용자가 사용자 관리 권한(USER:MANAGE 또는 ROLE:MANAGE)을 가지고 있는지 확인
+     */
+    private boolean hasUserManageAuthority() {
+        org.springframework.security.core.Authentication authentication =
+                org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null) {
+            return false;
+        }
+        return authentication.getAuthorities().stream()
+                .anyMatch(auth -> "USER:MANAGE".equals(auth.getAuthority())
+                        || "ROLE:MANAGE".equals(auth.getAuthority()));
     }
 
     private String getTranslatedName(String companyCode) {

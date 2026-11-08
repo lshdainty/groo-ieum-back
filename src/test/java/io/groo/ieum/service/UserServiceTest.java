@@ -422,7 +422,7 @@ class UserServiceTest {
                     .build();
 
             // when
-            userService.editUser(data);
+            userService.editUser(data, "user1", false);
 
             // then
             then(userRepository).should().findById(userId);
@@ -440,8 +440,55 @@ class UserServiceTest {
             UserServiceDto data = UserServiceDto.builder().id(userId).build();
 
             // when & then
-            assertThatThrownBy(() -> userService.editUser(data))
+            assertThatThrownBy(() -> userService.editUser(data, "user1", false))
                     .isInstanceOf(EntityNotFoundException.class);
+        }
+
+        private void assertEditDenied(UserServiceDto data, String loginUserId, boolean canManage) {
+            assertThatThrownBy(() -> userService.editUser(data, loginUserId, canManage))
+                    .isInstanceOf(ForbiddenException.class)
+                    .extracting(e -> ((ForbiddenException) e).getErrorCode().getCode())
+                    .isEqualTo("PERMISSION_001");
+        }
+
+        @Test
+        @DisplayName("실패 - 남의 정보를 관리 권한 없이 고치면 403 이고 바뀌지 않는다")
+        void editUserFailOtherWithoutManage() {
+            User user = createTestUser("user1", "이서준", "user1@test.com");
+            given(userRepository.findById("user1")).willReturn(Optional.of(user));
+            assertEditDenied(UserServiceDto.builder().id("user1").name("바꿈").build(), "user2", false);
+            assertThat(user.getName()).isEqualTo("이서준");
+        }
+
+        @Test
+        @DisplayName("실패 - 본인이라도 역할을 바꾸는 요청은 관리 권한 없이는 403 (ADMIN 승격 차단)")
+        void editUserFailSelfRoleEscalation() {
+            User user = createTestUser("user1", "이서준", "user1@test.com");
+            given(userRepository.findById("user1")).willReturn(Optional.of(user));
+            assertEditDenied(UserServiceDto.builder().id("user1").name("바꿈").roleNames(List.of("ADMIN")).build(), "user1", false);
+            assertThat(user.getName()).isEqualTo("이서준");
+            assertThat(user.getRoles()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("성공 - 본인이 역할 변화 없이(보내지 않거나 같은 값) 프로필을 고치면 관리 권한 없이도 된다")
+        void editUserSuccessSelfSameRoles() {
+            User user = createTestUser("user1", "이서준", "user1@test.com");
+            given(userRepository.findById("user1")).willReturn(Optional.of(user));
+            userService.editUser(UserServiceDto.builder().id("user1").name("이하은").roleNames(List.of()).build(), "user1", false);
+            assertThat(user.getName()).isEqualTo("이하은");
+        }
+
+        @Test
+        @DisplayName("성공 - 관리 권한이 있으면 남의 정보와 역할도 고친다")
+        void editUserSuccessOtherByManager() {
+            User user = createTestUser("user1", "이서준", "user1@test.com");
+            given(userRepository.findById("user1")).willReturn(Optional.of(user));
+            Role role = Role.createRole("ADMIN", "관리자", "관리자 역할");
+            given(roleRepository.findByCode("ADMIN")).willReturn(Optional.of(role));
+            userService.editUser(UserServiceDto.builder().id("user1").name("이하은").roleNames(List.of("ADMIN")).build(), "admin", true);
+            assertThat(user.getName()).isEqualTo("이하은");
+            assertThat(user.getRoles()).contains(role);
         }
 
         @Test
@@ -458,7 +505,7 @@ class UserServiceTest {
                     .build();
 
             // when
-            userService.editUser(data);
+            userService.editUser(data, "user1", false);
 
             // then
             then(userRepository).should().findById(userId);
@@ -482,7 +529,7 @@ class UserServiceTest {
                     .build();
 
             // when
-            userService.editUser(data);
+            userService.editUser(data, "admin", true);
 
             // then
             then(userRepository).should().findById(userId);

@@ -29,6 +29,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.Map;
@@ -251,9 +252,23 @@ public class UserServiceImpl implements UserService {
 
     @Override
     @Transactional
-    public void editUser(UserServiceDto data) {
+    public void editUser(UserServiceDto data, String loginUserId, boolean canManage) {
         log.debug("사용자 수정 시작: id={}", data.getId());
         User user = checkUserExist(data.getId());
+
+        if (!canManage) {
+            if (!user.getId().equals(loginUserId)) {
+                log.warn("사용자 수정 접근 거부 - 로그인 유저: {}, 대상 유저: {}", loginUserId, data.getId());
+                throw new ForbiddenException(HrErrorCode.PERMISSION_DENIED);
+            }
+            if (data.getRoleNames() != null) {
+                Set<String> current = user.getRoles().stream().map(Role::getCode).collect(Collectors.toSet());
+                if (!current.equals(new HashSet<>(data.getRoleNames()))) {
+                    log.warn("역할 변경 접근 거부 - 로그인 유저: {}, 대상 유저: {}", loginUserId, data.getId());
+                    throw new ForbiddenException(HrErrorCode.PERMISSION_DENIED);
+                }
+            }
+        }
 
         UserServiceDto profileDto = UserServiceDto.builder().build();
         if (StringUtils.hasText(data.getProfileUUID()) && !data.getProfileUUID().equals(user.getProfileUUID())) {
