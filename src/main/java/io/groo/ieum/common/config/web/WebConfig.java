@@ -22,6 +22,7 @@ public class WebConfig implements WebMvcConfigurer {
     private final LoginUserArgumentResolver loginUserArgumentResolver;
     private final RequestResponseLoggingFilter requestResponseLoggingFilter;
     private final LocaleChangeInterceptor localeChangeInterceptor;
+    private final org.springframework.data.redis.core.StringRedisTemplate stringRedisTemplate;
 
     @Value("${file.resource-handler}")
     private String resourceHandler;
@@ -43,6 +44,15 @@ public class WebConfig implements WebMvcConfigurer {
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(localeChangeInterceptor);
+
+        // 로그인(인가코드 교환): 분당 60/IP — 로그인 1회당 1요청이라 NAT 뒤 여러 명이 몰려도 여유가 있다
+        registry.addInterceptor(new RateLimitInterceptor(stringRedisTemplate, "login", 60))
+                .addPathPatterns("/api/v1/auth/exchange-code");
+        // 메일 발송 · 비밀번호 계열: 분당 20/IP — 정상 사용은 사람이 누르는 횟수
+        registry.addInterceptor(new RateLimitInterceptor(stringRedisTemplate, "sensitive", 20))
+                .addPathPatterns("/api/v1/users/*/invitations/resend",
+                        "/api/v1/users/me/password",
+                        "/api/v1/users/*/password");
     }
 
     /**
