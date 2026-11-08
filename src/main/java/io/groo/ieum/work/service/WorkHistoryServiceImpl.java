@@ -2,6 +2,7 @@ package io.groo.ieum.work.service;
 
 import io.groo.core.exception.EntityNotFoundException;
 import io.groo.core.exception.ForbiddenException;
+import io.groo.core.exception.ErrorCode;
 import io.groo.ieum.common.exception.HrErrorCode;
 import io.groo.ieum.common.time.CompanyClock;
 import io.groo.core.exception.InvalidValueException;
@@ -251,11 +252,26 @@ public class WorkHistoryServiceImpl implements WorkHistoryService {
                 .build();
     }
 
+    /**
+     * 엑셀 내려받기는 한 번에 최대 1년까지만 허용한다.
+     * 시작일 + 1년(윤일은 {@link LocalDate#plusYears} 가 그 달 말일로 맞춘다) 당일까지가 상한이다.
+     * 기간이 비었거나 역전됐거나 1년을 넘으면 INVALID_PARAMETER(400).
+     */
+    static void validateExcelPeriod(WorkHistorySearchCondition condition) {
+        LocalDate start = condition == null ? null : condition.getStartDate();
+        LocalDate end = condition == null ? null : condition.getEndDate();
+        if (start == null || end == null || end.isBefore(start) || end.isAfter(start.plusYears(1))) {
+            log.warn("업무 이력 엑셀 다운로드 거절 - 기간 누락/역전/1년 초과: start={}, end={}", start, end);
+            throw new InvalidValueException(ErrorCode.INVALID_PARAMETER);
+        }
+    }
+
     @Override
     @Transactional(readOnly = true)
     public void downloadWorkHistoryExcel(HttpServletResponse response, WorkHistorySearchCondition condition)
             throws IOException {
         log.debug("업무 이력 엑셀 다운로드 시작: condition={}", condition);
+        validateExcelPeriod(condition);
         try (SXSSFWorkbook workbook = new SXSSFWorkbook(100)) { // keep 100 rows in memory
             Sheet sheet = workbook.createSheet("업무 이력");
 

@@ -936,4 +936,70 @@ class WorkHistoryServiceTest {
             assertThat(result).doesNotContain(LocalDate.of(2025, 1, 3));
         }
     }
+
+    @Nested
+    @DisplayName("업무 이력 엑셀 내려받기 기간 상한(F-3)")
+    class ExcelPeriodLimit {
+        private WorkHistorySearchCondition cond(LocalDate start, LocalDate end) {
+            WorkHistorySearchCondition c = new WorkHistorySearchCondition();
+            c.setStartDate(start);
+            c.setEndDate(end);
+            return c;
+        }
+
+        private void assertRejected(WorkHistorySearchCondition c) {
+            org.mockito.Mockito.clearInvocations(workHistoryRepository);
+            assertThatThrownBy(() -> workHistoryService.downloadWorkHistoryExcel(
+                    new org.springframework.mock.web.MockHttpServletResponse(), c))
+                    .isInstanceOf(InvalidValueException.class)
+                    .extracting(e -> ((InvalidValueException) e).getErrorCode())
+                    .isEqualTo(io.groo.core.exception.ErrorCode.INVALID_PARAMETER);
+            then(workHistoryRepository).should(never()).findAllStream(org.mockito.ArgumentMatchers.any());
+        }
+
+        private void assertAllowed(WorkHistorySearchCondition c) throws Exception {
+            given(workHistoryRepository.findAllStream(c)).willReturn(java.util.stream.Stream.empty());
+            workHistoryService.downloadWorkHistoryExcel(new org.springframework.mock.web.MockHttpServletResponse(), c);
+            then(workHistoryRepository).should().findAllStream(c);
+        }
+
+        @Test
+        @DisplayName("기간이 비었으면 거절")
+        void emptyPeriod() {
+            assertRejected(cond(null, null));
+            assertRejected(cond(LocalDate.of(2025, 1, 1), null));
+            assertRejected(cond(null, LocalDate.of(2025, 1, 1)));
+        }
+
+        @Test
+        @DisplayName("끝이 시작보다 앞서면 거절")
+        void reversed() {
+            assertRejected(cond(LocalDate.of(2025, 2, 1), LocalDate.of(2025, 1, 1)));
+        }
+
+        @Test
+        @DisplayName("정확히 1년까지 허용, 1년 + 1일은 거절")
+        void boundary() throws Exception {
+            assertAllowed(cond(LocalDate.of(2025, 1, 1), LocalDate.of(2026, 1, 1)));
+        }
+
+        @Test
+        @DisplayName("1년 + 1일은 거절")
+        void overOneYear() {
+            assertRejected(cond(LocalDate.of(2025, 1, 1), LocalDate.of(2026, 1, 2)));
+        }
+
+        @Test
+        @DisplayName("윤년 경계: 2024-02-29 + 1년 = 2025-02-28 허용, 03-01 거절")
+        void leapYear() throws Exception {
+            assertAllowed(cond(LocalDate.of(2024, 2, 29), LocalDate.of(2025, 2, 28)));
+            assertRejected(cond(LocalDate.of(2024, 2, 29), LocalDate.of(2025, 3, 1)));
+        }
+
+        @Test
+        @DisplayName("윤년 해 안의 1년(366일)도 허용")
+        void leapSpan() throws Exception {
+            assertAllowed(cond(LocalDate.of(2024, 1, 1), LocalDate.of(2024, 12, 31)));
+        }
+    }
 }

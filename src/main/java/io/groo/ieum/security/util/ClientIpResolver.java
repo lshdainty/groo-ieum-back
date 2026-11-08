@@ -48,7 +48,7 @@ public final class ClientIpResolver {
         return remote;
     }
 
-    static boolean isTrustedProxy(String ip) {
+    public static boolean isTrustedProxy(String ip) {
         InetAddress addr = parse(ip);
         if (addr == null) {
             return false;
