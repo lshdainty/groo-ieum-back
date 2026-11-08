@@ -69,7 +69,8 @@ public interface VacationApi {
             @Parameter(description = "사용자 ID", example = "user123", required = true)
             @PathVariable("userId") String userId,
             @Parameter(description = "조회할 연도", example = "2024", required = true)
-            @RequestParam("year") Integer year
+            @RequestParam("year") Integer year,
+            @Parameter(hidden = true) @LoginUser User loginUser
     );
 
     @Operation(
@@ -108,7 +109,8 @@ public interface VacationApi {
             @Parameter(description = "사용자 ID", example = "user123", required = true)
             @PathVariable("userId") String userId,
             @Parameter(description = "시작 날짜 (yyyy-MM-dd'T'HH:mm:ss)", example = "2024-01-01T00:00:00", required = true)
-            @RequestParam("startDate") @DateTimeFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss") LocalDateTime startDate
+            @RequestParam("startDate") @DateTimeFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss") LocalDateTime startDate,
+            @Parameter(hidden = true) @LoginUser User loginUser
     );
 
     @Operation(
@@ -233,7 +235,8 @@ public interface VacationApi {
             @Parameter(description = "사용자 ID", example = "user123", required = true)
             @PathVariable("userId") String userId,
             @Parameter(description = "조회할 연도 (YYYY)", example = "2024", required = true)
-            @RequestParam("year") String year
+            @RequestParam("year") String year,
+            @Parameter(hidden = true) @LoginUser User loginUser
     );
 
     @Operation(
@@ -256,7 +259,8 @@ public interface VacationApi {
             @Parameter(description = "사용자 ID", example = "user123", required = true)
             @PathVariable("userId") String userId,
             @Parameter(description = "기준 날짜 (yyyy-MM-dd'T'HH:mm:ss)", example = "2024-01-01T00:00:00", required = true)
-            @RequestParam("baseDate") @DateTimeFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss") LocalDateTime baseDate
+            @RequestParam("baseDate") @DateTimeFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss") LocalDateTime baseDate,
+            @Parameter(hidden = true) @LoginUser User loginUser
     );
 
     @Operation(
@@ -588,7 +592,8 @@ public interface VacationApi {
             @Parameter(description = "조회할 연도", example = "2024", required = true)
             @RequestParam("year") Integer year,
             @Parameter(description = "부여 상태 필터", example = "PENDING")
-            @RequestParam(value = "status", required = false) GrantStatus status
+            @RequestParam(value = "status", required = false) GrantStatus status,
+            @Parameter(hidden = true) @LoginUser User loginUser
     );
 
     @Operation(
@@ -610,7 +615,8 @@ public interface VacationApi {
             @Parameter(description = "사용자 ID", example = "user123", required = true)
             @PathVariable("userId") String userId,
             @Parameter(description = "조회할 연도", example = "2024", required = true)
-            @RequestParam("year") Integer year
+            @RequestParam("year") Integer year,
+            @Parameter(hidden = true) @LoginUser User loginUser
     );
 
     @Operation(
@@ -633,7 +639,8 @@ public interface VacationApi {
             @Parameter(description = "사용자 ID", example = "user123", required = true)
             @PathVariable("userId") String userId,
             @Parameter(description = "조회할 연도", example = "2024", required = true)
-            @RequestParam("year") Integer year
+            @RequestParam("year") Integer year,
+            @Parameter(hidden = true) @LoginUser User loginUser
     );
 
     @Operation(

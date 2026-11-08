@@ -63,7 +63,8 @@ public class VacationApiController implements VacationApi {
 
     @Override
     @PreAuthorize("hasAuthority('VACATION:READ')")
-    public ApiResponse getUserVacationHistory(String userId, Integer year) {
+    public ApiResponse getUserVacationHistory(String userId, Integer year, @LoginUser User loginUser) {
+        validateVacationReadAccess(loginUser.getId(), userId);
         VacationServiceDto vacationInfo = vacationService.getUserVacationHistory(userId, year);
 
         // VacationGrant 정보 변환
@@ -152,7 +153,8 @@ public class VacationApiController implements VacationApi {
 
     @Override
     @PreAuthorize("hasAuthority('VACATION:READ')")
-    public ApiResponse getAvailableVacations(String userId, LocalDateTime startDate) {
+    public ApiResponse getAvailableVacations(String userId, LocalDateTime startDate, @LoginUser User loginUser) {
+        validateVacationReadAccess(loginUser.getId(), userId);
         List<VacationServiceDto> availableVacations = vacationService.getAvailableVacations(userId, startDate);
 
         // 타입별 잔여 휴가 리스트 생성
@@ -257,7 +259,8 @@ public class VacationApiController implements VacationApi {
 
     @Override
     @PreAuthorize("hasAuthority('VACATION:READ')")
-    public ApiResponse getUserMonthlyVacationStats(String userId, String year) {
+    public ApiResponse getUserMonthlyVacationStats(String userId, String year, @LoginUser User loginUser) {
+        validateVacationReadAccess(loginUser.getId(), userId);
         List<VacationServiceDto> histories = vacationService.getUserMonthlyVacationStats(userId, year);
 
         List<VacationApiDto.GetUserMonthlyVacationStatsResp> resp = histories.stream()
@@ -273,7 +276,8 @@ public class VacationApiController implements VacationApi {
 
     @Override
     @PreAuthorize("hasAuthority('VACATION:READ')")
-    public ApiResponse getUserVacationStats(String userId, LocalDateTime baseDate) {
+    public ApiResponse getUserVacationStats(String userId, LocalDateTime baseDate, @LoginUser User loginUser) {
+        validateVacationReadAccess(loginUser.getId(), userId);
         VacationServiceDto stats = vacationService.getUserVacationStats(userId, baseDate);
 
         return ApiResponse.success(new VacationApiDto.GetUserVacationStatsResp(
@@ -544,7 +548,8 @@ public class VacationApiController implements VacationApi {
 
     @Override
     @PreAuthorize("hasAuthority('VACATION:APPROVE')")
-    public ApiResponse getAllVacationsByApprover(String approverId, Integer year, GrantStatus status) {
+    public ApiResponse getAllVacationsByApprover(String approverId, Integer year, GrantStatus status, @LoginUser User loginUser) {
+        validateVacationOwnership(loginUser.getId(), approverId);
         List<VacationServiceDto> vacations = vacationService.getAllVacationsByApprover(approverId, year, status);
 
         List<VacationApiDto.GetUserRequestedVacationsResp> resp = vacations.stream()
@@ -601,7 +606,8 @@ public class VacationApiController implements VacationApi {
 
     @Override
     @PreAuthorize("hasAuthority('VACATION:REQUEST')")
-    public ApiResponse getUserRequestedVacations(String userId, Integer year) {
+    public ApiResponse getUserRequestedVacations(String userId, Integer year, @LoginUser User loginUser) {
+        validateVacationReadAccess(loginUser.getId(), userId);
         List<VacationServiceDto> requestedVacations = vacationService.getAllRequestedVacationsByUserId(userId, year);
 
         List<VacationApiDto.GetUserRequestedVacationsResp> resp = requestedVacations.stream()
@@ -658,7 +664,8 @@ public class VacationApiController implements VacationApi {
 
     @Override
     @PreAuthorize("hasAuthority('VACATION:REQUEST')")
-    public ApiResponse getUserRequestedVacationStats(String userId, Integer year) {
+    public ApiResponse getUserRequestedVacationStats(String userId, Integer year, @LoginUser User loginUser) {
+        validateVacationReadAccess(loginUser.getId(), userId);
         VacationServiceDto stats = vacationService.getRequestedVacationStatsByUserId(userId, year);
 
         return ApiResponse.success(new VacationApiDto.GetUserRequestedVacationStatsResp(
@@ -774,6 +781,26 @@ public class VacationApiController implements VacationApi {
             log.warn("휴가 접근 거부 - 로그인 유저: {}, 대상 유저: {}", loginUserId, targetUserId);
             throw new ForbiddenException(HrErrorCode.VACATION_ACCESS_DENIED);
         }
+    }
+
+    /**
+     * 휴가 조회 범위 검증
+     * 본인 기록이거나, 휴가 관리(VACATION:MANAGE) · 휴가 승인(VACATION:APPROVE) 권한이 있을 때만 다른 사람의 기록을 읽는다
+     */
+    private void validateVacationReadAccess(String loginUserId, String targetUserId) {
+        if (!loginUserId.equals(targetUserId) && !hasAuthority("VACATION:MANAGE") && !hasAuthority("VACATION:APPROVE")) {
+            log.warn("휴가 조회 거부 - 로그인 유저: {}, 대상 유저: {}", loginUserId, targetUserId);
+            throw new ForbiddenException(HrErrorCode.VACATION_ACCESS_DENIED);
+        }
+    }
+
+    private boolean hasAuthority(String authority) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null) {
+            return false;
+        }
+        return authentication.getAuthorities().stream()
+                .anyMatch(auth -> authority.equals(auth.getAuthority()));
     }
 
     /**

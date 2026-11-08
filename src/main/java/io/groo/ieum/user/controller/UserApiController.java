@@ -2,7 +2,9 @@ package io.groo.ieum.user.controller;
 
 import io.groo.core.audit.AccessAction;
 import io.groo.core.audit.AuditAccess;
+import io.groo.core.exception.ForbiddenException;
 import io.groo.core.type.YNType;
+import io.groo.ieum.common.exception.HrErrorCode;
 import io.groo.ieum.security.annotation.LoginUser;
 import io.groo.ieum.user.controller.dto.UserApiDto;
 import io.groo.core.controller.ApiResponse;
@@ -49,7 +51,12 @@ public class UserApiController implements UserApi {
     @Override
     @PreAuthorize("hasAuthority('USER:READ')")
     @AuditAccess(action = AccessAction.READ, targetType = "USER", targetId = "#userId")
-    public ApiResponse searchUser(String userId) {
+    public ApiResponse searchUser(String userId, @LoginUser User loginUser) {
+        // 본인 정보이거나 사용자 관리(USER:MANAGE) · 권한 관리(ROLE:MANAGE) 권한이 있을 때만 다른 사람의 상세 정보를 읽는다
+        if (!loginUser.getId().equals(userId) && !canReadAnyUser()) {
+            log.warn("사용자 조회 거부 - 로그인 유저: {}, 대상 유저: {}", loginUser.getId(), userId);
+            throw new ForbiddenException(HrErrorCode.PERMISSION_DENIED);
+        }
         UserServiceDto user = userService.searchUser(userId);
 
         // 역할 상세 정보 변환 (null 체크)
@@ -97,6 +104,17 @@ public class UserApiController implements UserApi {
                 user.getInvitationStatus(),
                 user.getRegisteredAt()
         ));
+    }
+
+    private boolean canReadAnyUser() {
+        org.springframework.security.core.Authentication authentication =
+                org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null) {
+            return false;
+        }
+        return authentication.getAuthorities().stream()
+                .anyMatch(auth -> "USER:MANAGE".equals(auth.getAuthority())
+                        || "ROLE:MANAGE".equals(auth.getAuthority()));
     }
 
     @Override
