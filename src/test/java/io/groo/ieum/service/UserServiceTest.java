@@ -618,11 +618,29 @@ class UserServiceTest {
     @Nested
     @DisplayName("프로필 이미지 임시 저장")
     class SaveProfileImgInTempFolder {
+        private static final byte[] JPEG_BYTES =
+                {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, (byte) 0xE0, 0, 0x10, 'J', 'F', 'I', 'F', 0, 1};
+
+        @Test
+        @DisplayName("실패 - 확장자가 jpg 여도 내용이 이미지가 아니면 저장하지 않는다")
+        void saveProfileImgRejectsNonImageContent() {
+            MockMultipartFile fake = new MockMultipartFile("file", "test.jpg", "image/jpeg", "<html>".getBytes());
+
+            try (MockedStatic<FileUtils> mocked = mockStatic(FileUtils.class)) {
+                mocked.when(() -> FileUtils.getExtension(anyString())).thenReturn("jpg");
+
+                org.junit.jupiter.api.Assertions.assertThrows(
+                        io.groo.core.exception.InvalidValueException.class,
+                        () -> userService.saveProfileImgInTempFolder(fake));
+                mocked.verify(() -> FileUtils.save(any(), any(), any(), any()), never());
+            }
+        }
+
         @Test
         @DisplayName("성공 - 프로필 이미지가 임시 폴더에 저장된다")
         void saveProfileImgSuccess() {
             // given
-            MockMultipartFile mockFile = new MockMultipartFile("file", "test.jpg", "image/jpeg", "test".getBytes());
+            MockMultipartFile mockFile = new MockMultipartFile("file", "test.jpg", "image/jpeg", JPEG_BYTES);
             String physicalFilename = "test.jpg_some-uuid";
 
             try (MockedStatic<FileUtils> mocked = mockStatic(FileUtils.class)) {
@@ -646,7 +664,7 @@ class UserServiceTest {
         @Test
         @DisplayName("실패 - 저장이 거절되면(false) 200 대신 오류를 던진다")
         void saveProfileImgRejected() {
-            MockMultipartFile mockFile = new MockMultipartFile("file", "test.jpg", "image/jpeg", "test".getBytes());
+            MockMultipartFile mockFile = new MockMultipartFile("file", "test.jpg", "image/jpeg", JPEG_BYTES);
             String physicalFilename = "test.jpg_some-uuid";
 
             try (MockedStatic<FileUtils> mocked = mockStatic(FileUtils.class)) {
