@@ -29,6 +29,7 @@ public class UserApiController implements UserApi {
     private final MessageSource messageSource;
 
     @Override
+    @PreAuthorize("hasAuthority('USER:MANAGE')")
     public ApiResponse joinUser(UserApiDto.JoinUserReq data) {
         String userId = userService.joinUser(UserServiceDto.builder()
                 .id(data.getUserId())
