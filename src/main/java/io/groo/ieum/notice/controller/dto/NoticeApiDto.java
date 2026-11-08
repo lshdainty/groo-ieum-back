@@ -20,7 +20,7 @@ public class NoticeApiDto {
     @Schema(description = "공지사항 등록 요청")
     @DateRange(startField = "startDate", endField = "endDate", message = "{error.notice.invalid.date}")
     public static class CreateNoticeReq {
-        @Schema(description = "작성자 ID", example = "admin", required = true)
+        @Schema(description = "작성자 ID (무시됨 - 서버가 로그인 사용자로 정한다)", example = "admin", deprecated = true)
         private String writerId;
 
         @Schema(description = "공지사항 제목", example = "시스템 점검 안내", required = true)

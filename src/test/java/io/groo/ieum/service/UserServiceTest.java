@@ -581,6 +581,20 @@ class UserServiceTest {
             then(roleRepository).should().findByCode("ADMIN");
             assertThat(user.getRoles()).contains(role);
         }
+
+        @Test
+        @DisplayName("실패 - 없는 역할 코드는 코드 값을 담지 않은 역할 없음 오류로 거절한다")
+        void editUserUnknownRoleDoesNotEchoCode() {
+            User user = createTestUser("user1", "이서준", "user1@test.com");
+            given(userRepository.findById("user1")).willReturn(Optional.of(user));
+            given(roleRepository.findByCode("SECRET_ROLE_X")).willReturn(Optional.empty());
+
+            UserServiceDto data = UserServiceDto.builder().id("user1").roleNames(List.of("SECRET_ROLE_X")).build();
+
+            org.assertj.core.api.Assertions.assertThatThrownBy(() -> userService.editUser(data, "admin", true))
+                    .isInstanceOf(io.groo.core.exception.EntityNotFoundException.class)
+                    .satisfies(e -> assertThat(e.getMessage()).doesNotContain("SECRET_ROLE_X"));
+        }
     }
 
     @Nested
@@ -618,11 +632,29 @@ class UserServiceTest {
     @Nested
     @DisplayName("프로필 이미지 임시 저장")
     class SaveProfileImgInTempFolder {
+        private static final byte[] JPEG_BYTES =
+                {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, (byte) 0xE0, 0, 0x10, 'J', 'F', 'I', 'F', 0, 1};
+
+        @Test
+        @DisplayName("실패 - 확장자가 jpg 여도 내용이 이미지가 아니면 저장하지 않는다")
+        void saveProfileImgRejectsNonImageContent() {
+            MockMultipartFile fake = new MockMultipartFile("file", "test.jpg", "image/jpeg", "<html>".getBytes());
+
+            try (MockedStatic<FileUtils> mocked = mockStatic(FileUtils.class)) {
+                mocked.when(() -> FileUtils.getExtension(anyString())).thenReturn("jpg");
+
+                org.junit.jupiter.api.Assertions.assertThrows(
+                        io.groo.core.exception.InvalidValueException.class,
+                        () -> userService.saveProfileImgInTempFolder(fake));
+                mocked.verify(() -> FileUtils.save(any(), any(), any(), any()), never());
+            }
+        }
+
         @Test
         @DisplayName("성공 - 프로필 이미지가 임시 폴더에 저장된다")
         void saveProfileImgSuccess() {
             // given
-            MockMultipartFile mockFile = new MockMultipartFile("file", "test.jpg", "image/jpeg", "test".getBytes());
+            MockMultipartFile mockFile = new MockMultipartFile("file", "test.jpg", "image/jpeg", JPEG_BYTES);
             String physicalFilename = "test.jpg_some-uuid";
 
             try (MockedStatic<FileUtils> mocked = mockStatic(FileUtils.class)) {
@@ -646,7 +678,7 @@ class UserServiceTest {
         @Test
         @DisplayName("실패 - 저장이 거절되면(false) 200 대신 오류를 던진다")
         void saveProfileImgRejected() {
-            MockMultipartFile mockFile = new MockMultipartFile("file", "test.jpg", "image/jpeg", "test".getBytes());
+            MockMultipartFile mockFile = new MockMultipartFile("file", "test.jpg", "image/jpeg", JPEG_BYTES);
             String physicalFilename = "test.jpg_some-uuid";
 
             try (MockedStatic<FileUtils> mocked = mockStatic(FileUtils.class)) {

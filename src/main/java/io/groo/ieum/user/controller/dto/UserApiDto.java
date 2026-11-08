@@ -6,6 +6,7 @@ import io.groo.core.type.CountryCode;
 import io.groo.core.type.YNType;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import org.springframework.web.multipart.MultipartFile;
@@ -320,6 +321,7 @@ public class UserApiDto {
     @Schema(description = "대시보드 수정 요청")
     public static class UpdateDashboardReq {
         @Schema(description = "대시보드 설정")
+        @Size(max = 20000)
         private String dashboard;
     }
 

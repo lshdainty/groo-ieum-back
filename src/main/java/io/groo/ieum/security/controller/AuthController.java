@@ -10,7 +10,6 @@ import io.groo.ieum.user.domain.User;
 import io.groo.ieum.user.service.UserService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.util.StringUtils;
@@ -27,7 +26,6 @@ import org.springframework.web.bind.annotation.*;
  */
 @RestController
 @RequiredArgsConstructor
-@Slf4j
 @Tag(name = "Auth", description = "인증/보안 API")
 public class AuthController implements AuthApi {
     private final UserService userService;
@@ -84,10 +82,6 @@ public class AuthController implements AuthApi {
                         userService.generateProfileUrl(user.getProfileName(), user.getProfileUUID()) : null,
                 YNType.N  // 비밀번호 변경 필요 여부 (SSO에서 관리)
         );
-
-        log.info("user info : {}, {}, {}, roles: {}, permissions: {}, {}",
-                result.getUserId(), result.getUserName(), result.getUserEmail(),
-                result.getUserRoles(), result.getPermissions(), result.getProfileUrl());
 
         return ApiResponse.success(result);
     }

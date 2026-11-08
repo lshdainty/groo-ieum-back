@@ -6,6 +6,7 @@ import io.groo.ieum.notice.controller.dto.NoticeApiDto;
 import io.groo.ieum.notice.service.NoticeService;
 import io.groo.ieum.notice.service.dto.NoticeServiceDto;
 import io.groo.ieum.notice.type.NoticeType;
+import io.groo.ieum.user.domain.User;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.MessageSource;
@@ -27,11 +28,19 @@ public class NoticeApiController implements NoticeApi {
     private final NoticeService noticeService;
     private final MessageSource messageSource;
 
+    /** 한 번에 가져올 수 있는 공지 수 상한. 웹은 최대 50 을 쓴다. */
+    static final int MAX_PAGE_SIZE = 100;
+
+    private static Pageable pageRequest(int page, int size) {
+        return PageRequest.of(page, Math.min(size, MAX_PAGE_SIZE));
+    }
+
     @Override
     @PreAuthorize("hasAuthority('NOTICE:MANAGE')")
-    public ApiResponse createNotice(NoticeApiDto.CreateNoticeReq data) {
+    public ApiResponse createNotice(NoticeApiDto.CreateNoticeReq data, User loginUser) {
+        // 작성자는 본문 writer_id 가 아니라 로그인 사용자다 (남의 이름으로 공지 방지)
         Long noticeId = noticeService.createNotice(NoticeServiceDto.builder()
-                .writerId(data.getWriterId())
+                .writerId(loginUser.getId())
                 .title(data.getTitle())
                 .content(data.getContent())
                 .type(data.getNoticeType())
@@ -69,7 +78,7 @@ public class NoticeApiController implements NoticeApi {
     @Override
     @PreAuthorize("hasAuthority('NOTICE:READ')")
     public ApiResponse searchNotices(int page, int size) {
-        Pageable pageable = PageRequest.of(page, size);
+        Pageable pageable = pageRequest(page, size);
         Page<NoticeServiceDto> noticePage = noticeService.searchNotices(pageable);
 
         return ApiResponse.success(buildPageResponse(noticePage));
@@ -78,7 +87,7 @@ public class NoticeApiController implements NoticeApi {
     @Override
     @PreAuthorize("hasAuthority('NOTICE:READ')")
     public ApiResponse searchNoticesByType(NoticeType type, int page, int size) {
-        Pageable pageable = PageRequest.of(page, size);
+        Pageable pageable = pageRequest(page, size);
         Page<NoticeServiceDto> noticePage = noticeService.searchNoticesByType(type, pageable);
 
         return ApiResponse.success(buildPageResponse(noticePage));
@@ -87,7 +96,7 @@ public class NoticeApiController implements NoticeApi {
     @Override
     @PreAuthorize("hasAuthority('NOTICE:READ')")
     public ApiResponse searchNoticesByKeyword(String keyword, int page, int size) {
-        Pageable pageable = PageRequest.of(page, size);
+        Pageable pageable = pageRequest(page, size);
         Page<NoticeServiceDto> noticePage = noticeService.searchNoticesByKeyword(keyword, pageable);
 
         return ApiResponse.success(buildPageResponse(noticePage));
@@ -96,7 +105,7 @@ public class NoticeApiController implements NoticeApi {
     @Override
     @PreAuthorize("hasAuthority('NOTICE:READ')")
     public ApiResponse searchActiveNotices(int page, int size) {
-        Pageable pageable = PageRequest.of(page, size);
+        Pageable pageable = pageRequest(page, size);
         Page<NoticeServiceDto> noticePage = noticeService.searchActiveNotices(pageable);
 
         return ApiResponse.success(buildPageResponse(noticePage));
@@ -105,7 +114,7 @@ public class NoticeApiController implements NoticeApi {
     @Override
     @PreAuthorize("hasAuthority('NOTICE:READ')")
     public ApiResponse searchPinnedNotices(int page, int size) {
-        Pageable pageable = PageRequest.of(page, size);
+        Pageable pageable = pageRequest(page, size);
         Page<NoticeServiceDto> noticePage = noticeService.searchPinnedNotices(pageable);
 
         return ApiResponse.success(buildPageResponse(noticePage));

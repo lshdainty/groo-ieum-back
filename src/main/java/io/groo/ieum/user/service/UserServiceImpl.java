@@ -9,6 +9,7 @@ import io.groo.ieum.client.sso.dto.SsoInvitationStatusResponse;
 import io.groo.ieum.client.sso.dto.SsoInviteRequest;
 import io.groo.ieum.client.sso.dto.SsoInviteResponse;
 import io.groo.ieum.common.exception.HrErrorCode;
+import io.groo.ieum.common.util.ImageSignatureValidator;
 import io.groo.core.type.YNType;
 import io.groo.core.util.MessageResolver;
 import io.groo.core.util.FileUploadValidator;
@@ -280,7 +281,10 @@ public class UserServiceImpl implements UserService {
         List<Role> roles = null;
         if (data.getRoleNames() != null) {
             roles = data.getRoleNames().stream()
-                    .map(code -> roleRepository.findByCode(code).orElseThrow(() -> new IllegalArgumentException("Role not found: " + code)))
+                    .map(code -> roleRepository.findByCode(code).orElseThrow(() -> {
+                        log.warn("역할 조회 실패: code={}", code);
+                        return new EntityNotFoundException(HrErrorCode.ROLE_NOT_FOUND);
+                    }))
                     .collect(Collectors.toList());
         }
 
@@ -310,6 +314,7 @@ public class UserServiceImpl implements UserService {
         log.debug("프로필 이미지 임시 저장 시작: filename={}", file.getOriginalFilename());
 
         FileUploadValidator.validate(file, ALLOWED_PROFILE_EXTENSIONS, MAX_PROFILE_SIZE);
+        ImageSignatureValidator.validate(file);
 
         String originalFilename = StringUtils.cleanPath(file.getOriginalFilename());
 

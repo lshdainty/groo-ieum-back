@@ -20,6 +20,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * 모든 HTTP 요청/응답에 대한 포괄적인 로깅을 수행하는 필터
@@ -74,8 +76,16 @@ public class RequestResponseLoggingFilter extends OncePerRequestFilter {
      * 다시 컴파일되지 않는다(예전 판은 요청 하나마다 최대 34번 {@code Pattern.compile} 을 했다).
      */
     private static final SensitiveDataMasker MASKER = SensitiveDataMasker.withExtraKeys(
-            "invitation_token",
-            "hr_access_token"
+            Stream.concat(
+                    Stream.of(
+                            "invitation_token",
+                            "hr_access_token",
+                            // 사용자 수정 · 초대 본문에 실리는 생년월일 (이메일 계열은 CONTACT_PII_KEYS 가 가린다)
+                            "user_birth",
+                            "birth"
+                    ),
+                    SensitiveDataMasker.CONTACT_PII_KEYS.stream()
+            ).collect(Collectors.toUnmodifiableSet())
     );
 
     @Override

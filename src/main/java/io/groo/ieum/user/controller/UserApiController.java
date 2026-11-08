@@ -29,6 +29,7 @@ public class UserApiController implements UserApi {
     private final MessageSource messageSource;
 
     @Override
+    @PreAuthorize("hasAuthority('USER:MANAGE')")
     public ApiResponse joinUser(UserApiDto.JoinUserReq data) {
         String userId = userService.joinUser(UserServiceDto.builder()
                 .id(data.getUserId())
@@ -125,6 +126,7 @@ public class UserApiController implements UserApi {
     }
 
     @Override
+    @PreAuthorize("hasAuthority('USER:MANAGE')")
     public ApiResponse checkUserIdDuplicate(String userId) {
         boolean isDuplicate = userService.checkUserIdDuplicate(userId);
         return ApiResponse.success(new UserApiDto.CheckUserIdDuplicateResp(isDuplicate));
@@ -278,6 +280,7 @@ public class UserApiController implements UserApi {
      * 사용자의 메인 부서 존재 여부 확인
      */
     @Override
+    @PreAuthorize("hasAuthority('USER:MANAGE')")
     public ApiResponse checkUserMainDepartmentExistence(String userId) {
         YNType hasMainDepartment = userService.checkUserHasMainDepartment(userId);
         return ApiResponse.success(new UserApiDto.CheckMainDepartmentExistenceResp(hasMainDepartment));
