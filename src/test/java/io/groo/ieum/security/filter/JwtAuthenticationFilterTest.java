@@ -2,7 +2,10 @@ package io.groo.ieum.security.filter;
 
 import io.groo.ieum.common.config.properties.JwtProperties;
 import io.groo.ieum.security.jwt.JwtTokenProvider;
+import io.groo.ieum.user.domain.User;
 import io.groo.ieum.user.service.UserService;
+import io.groo.core.exception.EntityNotFoundException;
+import io.groo.ieum.common.exception.HrErrorCode;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -23,7 +26,6 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.lenient;
 
@@ -62,8 +64,7 @@ class JwtAuthenticationFilterTest {
         lenient().when(jwtTokenProvider.getPermissionsFromHrToken(TOKEN)).thenReturn(List.of());
         // 갱신 분기에서만 쓰이는 스텁 — 비갱신 테스트에서는 호출되지 않는다.
         lenient().when(jwtProperties.getHrAccessExpiration()).thenReturn(3_600_000L);
-        lenient().when(jwtTokenProvider.createHrAccessToken(
-                anyString(), any(), anyString(), anyString(), anyList(), anyList()))
+        lenient().when(jwtTokenProvider.createHrAccessToken(any(User.class), anyList(), anyList()))
             .thenReturn(RENEWED);
     }
 
@@ -88,12 +89,33 @@ class JwtAuthenticationFilterTest {
         @DisplayName("성공 - 새 토큰을 hr_access_token 쿠키로 실어 준다")
         void renewsCookie() throws Exception {
             given(jwtTokenProvider.getRemainingExpiration(TOKEN)).willReturn(300_000L); // 5분
+            User user = org.mockito.Mockito.mock(User.class);
+            given(user.getRoles()).willReturn(new java.util.ArrayList<>());
+            given(user.getAllAuthorities()).willReturn(List.of());
+            given(userService.findUserById("user1")).willReturn(user);
 
             MockHttpServletResponse response = runFilter();
 
             String setCookie = response.getHeader("Set-Cookie");
             assertThat(setCookie).contains("hr_access_token=" + RENEWED);
             assertThat(setCookie).contains("HttpOnly");
+            assertThat(SecurityContextHolder.getContext().getAuthentication()).isNotNull();
+        }
+    }
+
+    @Nested
+    @DisplayName("갱신 구간인데 사용자가 삭제(퇴사)됐으면")
+    class WhenUserDeleted {
+
+        @Test
+        @DisplayName("성공 - 갱신하지 않고, 남은 수명 동안의 이번 요청은 그대로 처리한다")
+        void doesNotRenewDeletedUser() throws Exception {
+            given(jwtTokenProvider.getRemainingExpiration(TOKEN)).willReturn(300_000L);
+            given(userService.findUserById("user1")).willThrow(new EntityNotFoundException(HrErrorCode.USER_NOT_FOUND));
+
+            MockHttpServletResponse response = runFilter();
+
+            assertThat(response.getHeader("Set-Cookie")).isNull();
             assertThat(SecurityContextHolder.getContext().getAuthentication()).isNotNull();
         }
     }
