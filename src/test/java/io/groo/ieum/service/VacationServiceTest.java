@@ -4,8 +4,10 @@ import io.groo.ieum.common.time.CompanyClock;
 import io.groo.core.exception.BusinessRuleViolationException;
 import io.groo.core.exception.EntityNotFoundException;
 import io.groo.core.exception.ForbiddenException;
+import io.groo.core.exception.InvalidValueException;
 import io.groo.core.type.CountryCode;
 import io.groo.core.type.YNType;
+import io.groo.ieum.department.domain.Department;
 import io.groo.ieum.department.repository.DepartmentRepository;
 import io.groo.ieum.holiday.repository.HolidayRepository;
 import io.groo.ieum.vacation.domain.UserVacationPlan;
@@ -36,6 +38,7 @@ import io.groo.ieum.vacation.service.dto.VacationApprovalServiceDto;
 import io.groo.ieum.vacation.service.dto.VacationPolicyServiceDto;
 import io.groo.ieum.vacation.service.dto.VacationServiceDto;
 import io.groo.ieum.vacation.service.policy.ManualGrant;
+import io.groo.ieum.vacation.service.policy.OnRequest;
 import io.groo.ieum.vacation.service.policy.description.RepeatGrantDescriptionFactory;
 import io.groo.ieum.vacation.service.policy.factory.VacationPolicyStrategyFactory;
 import lombok.extern.slf4j.Slf4j;
@@ -60,6 +63,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.BDDMockito.*;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 
 @Slf4j
 @ExtendWith(MockitoExtension.class)
@@ -1671,6 +1675,84 @@ class VacationServiceTest {
             // when & then
             assertThatThrownBy(() -> vacationService.useVacation(data))
                     .isInstanceOf(BusinessRuleViolationException.class);
+        }
+    }
+
+    @Nested
+    @DisplayName("휴가 신청 - 승인자 결재선")
+    class RequestVacationApprovers {
+        private Department deptHeadedBy(String headId, long level) {
+            Department dept = mock(Department.class);
+            User head = createTestUser(headId);
+            lenient().when(dept.getHeadUser()).thenReturn(head);
+            lenient().when(dept.getLevel()).thenReturn(level);
+            return dept;
+        }
+
+        private void givenRequestSetup(String userId, Department... chain) {
+            User user = createTestUser(userId);
+            VacationPolicy policy = VacationPolicy.createOnRequestPolicy(
+                    "연차", "연차 신청", VacationType.ANNUAL, new BigDecimal("1.0000"),
+                    YNType.N, YNType.N, 1, EffectiveType.IMMEDIATELY, ExpirationType.END_OF_YEAR);
+            ReflectionTestUtils.setField(policy, "rowId", 7L);
+
+            VacationPlan plan = mock(VacationPlan.class);
+            given(plan.hasPolicy(7L)).willReturn(true);
+            UserVacationPlan userPlan = mock(UserVacationPlan.class);
+            given(userPlan.getIsDeleted()).willReturn(YNType.N);
+            given(userPlan.getVacationPlan()).willReturn(plan);
+
+            given(userService.checkUserExist(userId)).willReturn(user);
+            given(vacationPolicyRepository.findByRowId(7L)).willReturn(Optional.of(policy));
+            given(userVacationPlanRepository.findByUserIdWithPlanAndPolicies(userId)).willReturn(List.of(userPlan));
+            given(departmentRepository.findApproversByUserId(userId)).willReturn(List.of(chain));
+        }
+
+        private VacationServiceDto request(String... approverIds) {
+            return VacationServiceDto.builder()
+                    .policyId(7L)
+                    .desc("연차 신청")
+                    .approverIds(new java.util.ArrayList<>(List.of(approverIds)))
+                    .grantTime(new BigDecimal("1.0000"))
+                    .requestStartTime(LocalDateTime.of(2030, 1, 2, 9, 0))
+                    .requestEndTime(LocalDateTime.of(2030, 1, 2, 18, 0))
+                    .requestDesc("개인 사유")
+                    .build();
+        }
+
+        @Test
+        @DisplayName("실패 - 신청자의 상위 부서장이 아닌 다른 부서장을 승인자로 고르면 거절한다")
+        void requestVacationFailApproverOutsideChain() {
+            // given: 신청자의 결재선은 boss 하나, friend 는 다른 부서의 부서장
+            Department bossDept = deptHeadedBy("boss", 1L);
+            Department friendDept = deptHeadedBy("friend", 1L);
+            givenRequestSetup("u1", bossDept);
+            given(userService.checkUserExist("friend")).willReturn(createTestUser("friend"));
+            given(departmentRepository.findByUserIds(List.of("friend"))).willReturn(List.of(friendDept));
+
+            // when & then
+            assertThatThrownBy(() -> vacationService.requestVacation("u1", request("friend")))
+                    .isInstanceOf(InvalidValueException.class);
+            then(vacationGrantRepository).should(never()).save(any());
+        }
+
+        @Test
+        @DisplayName("성공 - 결재선 안의 부서장을 승인자로 고르면 신청이 만들어진다")
+        void requestVacationSuccessApproverInChain() {
+            // given
+            Department bossDept = deptHeadedBy("boss", 1L);
+            givenRequestSetup("u1", bossDept);
+            given(userService.checkUserExist("boss")).willReturn(createTestUser("boss"));
+            given(departmentRepository.findByUserIds(List.of("boss"))).willReturn(List.of(bossDept));
+            OnRequest onRequest = mock(OnRequest.class);
+            given(vacationPolicyStrategyFactory.getStrategy(GrantMethod.ON_REQUEST)).willReturn(onRequest);
+            given(onRequest.calculateGrantTime(any(), any())).willReturn(new BigDecimal("1.0000"));
+
+            // when
+            vacationService.requestVacation("u1", request("boss"));
+
+            // then
+            then(vacationGrantRepository).should().save(any(VacationGrant.class));
         }
     }
 
