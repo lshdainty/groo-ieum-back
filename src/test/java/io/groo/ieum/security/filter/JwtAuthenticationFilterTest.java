@@ -2,7 +2,10 @@ package io.groo.ieum.security.filter;
 
 import io.groo.ieum.common.config.properties.JwtProperties;
 import io.groo.ieum.security.jwt.JwtTokenProvider;
+import io.groo.ieum.user.domain.User;
 import io.groo.ieum.user.service.UserService;
+import io.groo.core.exception.EntityNotFoundException;
+import io.groo.ieum.common.exception.HrErrorCode;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -42,6 +45,8 @@ class JwtAuthenticationFilterTest {
     private UserService userService;
     @Mock
     private JwtProperties jwtProperties;
+    @Mock
+    private io.groo.ieum.security.service.TokenRevocationService tokenRevocationService;
 
     @InjectMocks
     private JwtAuthenticationFilter filter;
@@ -62,8 +67,7 @@ class JwtAuthenticationFilterTest {
         lenient().when(jwtTokenProvider.getPermissionsFromHrToken(TOKEN)).thenReturn(List.of());
         // 갱신 분기에서만 쓰이는 스텁 — 비갱신 테스트에서는 호출되지 않는다.
         lenient().when(jwtProperties.getHrAccessExpiration()).thenReturn(3_600_000L);
-        lenient().when(jwtTokenProvider.createHrAccessToken(
-                anyString(), any(), anyString(), anyString(), anyList(), anyList()))
+        lenient().when(jwtTokenProvider.createHrAccessToken(any(User.class), anyList(), anyList()))
             .thenReturn(RENEWED);
     }
 
@@ -88,6 +92,10 @@ class JwtAuthenticationFilterTest {
         @DisplayName("성공 - 새 토큰을 hr_access_token 쿠키로 실어 준다")
         void renewsCookie() throws Exception {
             given(jwtTokenProvider.getRemainingExpiration(TOKEN)).willReturn(300_000L); // 5분
+            User user = org.mockito.Mockito.mock(User.class);
+            given(user.getRoles()).willReturn(new java.util.ArrayList<>());
+            given(user.getAllAuthorities()).willReturn(List.of());
+            given(userService.findUserById("user1")).willReturn(user);
 
             MockHttpServletResponse response = runFilter();
 
@@ -95,6 +103,65 @@ class JwtAuthenticationFilterTest {
             assertThat(setCookie).contains("hr_access_token=" + RENEWED);
             assertThat(setCookie).contains("HttpOnly");
             assertThat(SecurityContextHolder.getContext().getAuthentication()).isNotNull();
+        }
+    }
+
+    @Nested
+    @DisplayName("갱신 구간인데 사용자가 삭제(퇴사)됐으면")
+    class WhenUserDeleted {
+
+        @Test
+        @DisplayName("성공 - 갱신하지 않고, 남은 수명 동안의 이번 요청은 그대로 처리한다")
+        void doesNotRenewDeletedUser() throws Exception {
+            given(jwtTokenProvider.getRemainingExpiration(TOKEN)).willReturn(300_000L);
+            given(userService.findUserById("user1")).willThrow(new EntityNotFoundException(HrErrorCode.USER_NOT_FOUND));
+
+            MockHttpServletResponse response = runFilter();
+
+            assertThat(response.getHeader("Set-Cookie")).isNull();
+            assertThat(SecurityContextHolder.getContext().getAuthentication()).isNotNull();
+        }
+    }
+
+    @Nested
+    @DisplayName("로그아웃 차단 목록")
+    class Revocation {
+
+        @Test
+        @DisplayName("성공 - 로그아웃된 jti 의 토큰은 인증되지 않는다")
+        void revokedTokenRejected() throws Exception {
+            given(jwtTokenProvider.getHrJti(TOKEN)).willReturn("jti-1");
+            given(tokenRevocationService.isRevoked("jti-1")).willReturn(true);
+
+            runFilter();
+
+            assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+        }
+
+        @Test
+        @DisplayName("성공 - jti 없는 옛 토큰은 차단 목록을 보지 않고 만료까지 허용한다")
+        void tokenWithoutJtiAllowed() throws Exception {
+            given(jwtTokenProvider.getHrJti(TOKEN)).willReturn(null);
+            given(jwtTokenProvider.getRemainingExpiration(TOKEN)).willReturn(1_800_000L);
+
+            runFilter();
+
+            assertThat(SecurityContextHolder.getContext().getAuthentication()).isNotNull();
+            org.mockito.Mockito.verify(tokenRevocationService, org.mockito.Mockito.never()).isRevoked(anyString());
+        }
+
+        @Test
+        @DisplayName("성공 - 차단되지 않은 jti 는 정상 인증 (갱신 시 옛 jti 는 차단하지 않는다)")
+        void liveJtiAllowed() throws Exception {
+            given(jwtTokenProvider.getHrJti(TOKEN)).willReturn("jti-2");
+            given(tokenRevocationService.isRevoked("jti-2")).willReturn(false);
+            given(jwtTokenProvider.getRemainingExpiration(TOKEN)).willReturn(1_800_000L);
+
+            runFilter();
+
+            assertThat(SecurityContextHolder.getContext().getAuthentication()).isNotNull();
+            org.mockito.Mockito.verify(tokenRevocationService, org.mockito.Mockito.never())
+                    .revoke(anyString(), org.mockito.ArgumentMatchers.anyLong());
         }
     }
 

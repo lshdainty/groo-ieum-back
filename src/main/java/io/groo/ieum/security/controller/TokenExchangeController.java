@@ -30,6 +30,8 @@ public class TokenExchangeController {
 
     private final TokenExchangeService tokenExchangeService;
     private final JwtProperties jwtProperties;
+    private final io.groo.ieum.security.jwt.JwtTokenProvider jwtTokenProvider;
+    private final io.groo.ieum.security.service.TokenRevocationService tokenRevocationService;
 
     private static final String ACCESS_TOKEN_COOKIE = "hr_access_token";
 
@@ -62,10 +64,27 @@ public class TokenExchangeController {
      * @return 성공 응답
      */
     @PostMapping("/logout")
-    @Operation(summary = "로그아웃", description = "HR JWT 쿠키를 삭제합니다.")
-    public ApiResponse<Void> logout(HttpServletResponse response) {
+    @Operation(summary = "로그아웃", description = "HR JWT 쿠키를 삭제하고 그 토큰을 서버에서도 무효화합니다.")
+    public ApiResponse<Void> logout(@org.springframework.web.bind.annotation.CookieValue(name = ACCESS_TOKEN_COOKIE, required = false) String token,
+                                    HttpServletResponse response) {
+        revokeIfHrToken(token);
         clearAccessTokenCookie(response);
         return ApiResponse.success(null);
+    }
+
+    /** 로그아웃하는 HR 토큰의 jti 를 남은 수명만큼 차단 목록에 넣는다. 실패해도 로그아웃(쿠키 삭제)은 진행한다. */
+    private void revokeIfHrToken(String token) {
+        if (token == null || token.isBlank()) {
+            return;
+        }
+        try {
+            if (jwtTokenProvider.validateHrToken(token)) {
+                tokenRevocationService.revoke(jwtTokenProvider.getHrJti(token),
+                        jwtTokenProvider.getRemainingExpiration(token));
+            }
+        } catch (Exception e) {
+            log.warn("로그아웃 토큰 무효화 실패 — 쿠키만 삭제한다: {}", e.getMessage());
+        }
     }
 
     private void setAccessTokenCookie(HttpServletResponse response, String accessToken) {

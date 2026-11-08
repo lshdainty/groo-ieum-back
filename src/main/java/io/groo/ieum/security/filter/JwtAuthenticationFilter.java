@@ -4,6 +4,7 @@ import io.groo.ieum.common.config.properties.JwtProperties;
 import io.groo.ieum.security.jwt.JwtTokenProvider;
 import io.groo.ieum.security.principal.JwtClaimsPrincipal;
 import io.groo.ieum.security.principal.JwtUserPrincipal;
+import io.groo.ieum.permission.domain.Role;
 import io.groo.ieum.user.domain.User;
 import io.groo.ieum.user.service.UserService;
 import jakarta.servlet.FilterChain;
@@ -41,6 +42,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final JwtTokenProvider jwtTokenProvider;
     private final UserService userService;
     private final JwtProperties jwtProperties;
+    private final io.groo.ieum.security.service.TokenRevocationService tokenRevocationService;
 
     private static final String AUTHORIZATION_HEADER = "Authorization";
     private static final String BEARER_PREFIX = "Bearer ";
@@ -59,6 +61,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 Authentication authentication;
 
                 if (jwtTokenProvider.isHrToken(token)) {
+                    // 로그아웃된 토큰(차단 목록의 jti)은 거절한다. jti 없는 옛 토큰은 만료까지 허용.
+                    String jti = jwtTokenProvider.getHrJti(token);
+                    if (jti != null && tokenRevocationService.isRevoked(jti)) {
+                        filterChain.doFilter(request, response);
+                        return;
+                    }
                     // HR JWT인 경우: Claims에서 직접 정보 추출 (DB 조회 없음)
                     authentication = createAuthenticationFromHrToken(token);
 
@@ -160,13 +168,19 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         if (remainingMs <= 0 || remainingMs >= RENEWAL_THRESHOLD_MS) {
             return;
         }
-        String renewed = jwtTokenProvider.createHrAccessToken(
-                jwtTokenProvider.getUserId(token),
-                jwtTokenProvider.getSsoUserRowIdFromHrToken(token),
-                jwtTokenProvider.getNameFromHrToken(token),
-                jwtTokenProvider.getEmailFromHrToken(token),
-                jwtTokenProvider.getRolesFromHrToken(token),
-                jwtTokenProvider.getPermissionsFromHrToken(token));
+        // 갱신 때 사용자 상태 · 권한을 DB 에서 다시 읽는다 — 삭제(퇴사)된 사용자는 더 살려 주지 않고
+        // (남은 수명 10분 안에 만료), 바뀐 역할 · 권한은 새 토큰에 반영한다.
+        // 조회 실패가 이번 요청의 인증까지 깨지 않도록 예외는 여기서 삼킨다.
+        String userId = jwtTokenProvider.getUserId(token);
+        User user;
+        try {
+            user = userService.findUserById(userId);
+        } catch (Exception e) {
+            log.warn("HR 토큰 갱신 거절 — 사용자 없음/삭제: userId={}", userId);
+            return;
+        }
+        List<String> roles = user.getRoles().stream().map(Role::getCode).collect(Collectors.toList());
+        String renewed = jwtTokenProvider.createHrAccessToken(user, roles, user.getAllAuthorities());
         // TokenExchangeController.setAccessTokenCookie 와 같은 속성 — 로그인이 심는 쿠키를
         // 그대로 대체해야 두 쿠키가 병존하지 않는다.
         ResponseCookie cookie = ResponseCookie.from(ACCESS_TOKEN_COOKIE, renewed)
