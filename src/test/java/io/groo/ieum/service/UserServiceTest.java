@@ -581,6 +581,20 @@ class UserServiceTest {
             then(roleRepository).should().findByCode("ADMIN");
             assertThat(user.getRoles()).contains(role);
         }
+
+        @Test
+        @DisplayName("실패 - 없는 역할 코드는 코드 값을 담지 않은 역할 없음 오류로 거절한다")
+        void editUserUnknownRoleDoesNotEchoCode() {
+            User user = createTestUser("user1", "이서준", "user1@test.com");
+            given(userRepository.findById("user1")).willReturn(Optional.of(user));
+            given(roleRepository.findByCode("SECRET_ROLE_X")).willReturn(Optional.empty());
+
+            UserServiceDto data = UserServiceDto.builder().id("user1").roleNames(List.of("SECRET_ROLE_X")).build();
+
+            org.assertj.core.api.Assertions.assertThatThrownBy(() -> userService.editUser(data, "admin", true))
+                    .isInstanceOf(io.groo.core.exception.EntityNotFoundException.class)
+                    .satisfies(e -> assertThat(e.getMessage()).doesNotContain("SECRET_ROLE_X"));
+        }
     }
 
     @Nested

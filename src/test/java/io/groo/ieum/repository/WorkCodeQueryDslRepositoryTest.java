@@ -181,7 +181,8 @@ class WorkCodeQueryDslRepositoryTest {
         // when & then
         assertThatThrownBy(() -> workCodeRepository.findAllByConditions("NONEXISTENT", null, null, null))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("부모 코드를 찾을 수 없습니다");
+                .hasMessageContaining("부모 코드를 찾을 수 없습니다")
+                .hasMessageNotContaining("NONEXISTENT");
     }
 
     @Test
@@ -190,7 +191,8 @@ class WorkCodeQueryDslRepositoryTest {
         // when & then
         assertThatThrownBy(() -> workCodeRepository.findAllByConditions(null, 999L, null, null))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("부모 코드를 찾을 수 없습니다");
+                .hasMessageContaining("부모 코드를 찾을 수 없습니다")
+                .hasMessageNotContaining("999");
     }
 
     @Test

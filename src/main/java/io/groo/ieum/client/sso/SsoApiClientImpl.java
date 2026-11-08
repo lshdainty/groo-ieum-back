@@ -301,14 +301,16 @@ public class SsoApiClientImpl implements SsoApiClient {
 
             ApiResponse<Void> body = response.getBody();
             if (body != null && !body.isSuccess()) {
-                throw new ExternalServiceException(HrErrorCode.SSO_SERVICE_ERROR, body.getMessage());
+                // SSO 가 돌려준 문장은 응답에 싣지 않고 로그로만 남긴다 (내부 단서 노출 방지)
+                log.warn("SSO resetPassword rejected for user {}: {}", userId, body.getMessage());
+                throw new ExternalServiceException(HrErrorCode.SSO_SERVICE_ERROR);
             }
 
             log.info("SSO resetPassword API success: userId={}", userId);
 
         } catch (HttpClientErrorException e) {
             log.warn("SSO resetPassword client error for user {}: {}", userId, e.getMessage());
-            throw new ExternalServiceException(HrErrorCode.SSO_SERVICE_ERROR, extractSsoErrorMessage(e), e);
+            throw new ExternalServiceException(HrErrorCode.SSO_SERVICE_ERROR, e);
         } catch (RestClientException e) {
             log.error("SSO resetPassword API failed for user {}: {}", userId, e.getMessage(), e);
             throw new ExternalServiceException(HrErrorCode.SSO_SERVICE_ERROR, "SSO 비밀번호 리셋 API 호출 실패", e);

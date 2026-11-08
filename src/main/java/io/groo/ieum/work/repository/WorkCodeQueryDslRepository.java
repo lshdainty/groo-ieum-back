@@ -67,12 +67,12 @@ public class WorkCodeQueryDslRepository implements WorkCodeRepository {
         } else if (parentWorkCodeId != null) {
             // rowId로 특정 부모 코드의 하위 코드 조회 (우선순위 높음)
             WorkCode parent = findByRowId(parentWorkCodeId)
-                    .orElseThrow(() -> new IllegalArgumentException("부모 코드를 찾을 수 없습니다 (rowId: " + parentWorkCodeId + ")"));
+                    .orElseThrow(() -> new IllegalArgumentException("부모 코드를 찾을 수 없습니다"));
             builder.and(workCode.parent.eq(parent));
         } else if (parentWorkCode != null && !parentWorkCode.isEmpty()) {
             // 코드 문자열로 특정 부모 코드의 하위 코드 조회
             WorkCode parent = findByCode(parentWorkCode)
-                    .orElseThrow(() -> new IllegalArgumentException("부모 코드를 찾을 수 없습니다: " + parentWorkCode));
+                    .orElseThrow(() -> new IllegalArgumentException("부모 코드를 찾을 수 없습니다"));
             builder.and(workCode.parent.eq(parent));
         }
 

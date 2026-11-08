@@ -281,7 +281,10 @@ public class UserServiceImpl implements UserService {
         List<Role> roles = null;
         if (data.getRoleNames() != null) {
             roles = data.getRoleNames().stream()
-                    .map(code -> roleRepository.findByCode(code).orElseThrow(() -> new IllegalArgumentException("Role not found: " + code)))
+                    .map(code -> roleRepository.findByCode(code).orElseThrow(() -> {
+                        log.warn("역할 조회 실패: code={}", code);
+                        return new EntityNotFoundException(HrErrorCode.ROLE_NOT_FOUND);
+                    }))
                     .collect(Collectors.toList());
         }
 
