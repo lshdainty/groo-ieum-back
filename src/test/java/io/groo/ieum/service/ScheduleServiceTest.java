@@ -215,13 +215,63 @@ class ScheduleServiceTest {
             willDoNothing().given(scheduleRepository).save(any(Schedule.class));
 
             // when
-            Long newScheduleId = scheduleService.updateSchedule(scheduleId, data);
+            Long newScheduleId = scheduleService.updateSchedule(scheduleId, data, userId, false);
 
             // then
-            then(scheduleRepository).should().findByRowId(scheduleId);
+            then(scheduleRepository).should(times(2)).findByRowId(scheduleId);
             then(userService).should().checkUserExist(userId);
             then(scheduleRepository).should().save(any(Schedule.class));
             assertThat(existingSchedule.getIsDeleted()).isEqualTo(YNType.Y);
+        }
+
+        private Schedule existing(String ownerId, Long id) {
+            User owner = createTestUser(ownerId);
+            LocalDateTime s = LocalDateTime.now().plusDays(1);
+            Schedule sc = Schedule.createSchedule(owner, "기존", ScheduleType.EDUCATION, s, s.plusHours(8));
+            setScheduleId(sc, id);
+            return sc;
+        }
+
+        private ScheduleServiceDto dataFor(String userId) {
+            LocalDateTime s = LocalDateTime.now().plusDays(5);
+            return ScheduleServiceDto.builder().userId(userId).type(ScheduleType.BUSINESSTRIP)
+                    .desc("출장").startDate(s).endDate(s.plusHours(8)).build();
+        }
+
+        @Test
+        @DisplayName("실패 - 남의 일정을 SCHEDULE:MANAGE 없이 고치면 403 이고 원래 일정이 지워지지 않는다")
+        void updateScheduleFailNotOwner() {
+            Schedule other = existing("userB", 1L);
+            given(scheduleRepository.findByRowId(1L)).willReturn(Optional.of(other));
+
+            assertThatThrownBy(() -> scheduleService.updateSchedule(1L, dataFor("userA"), "userA", false))
+                    .isInstanceOf(io.groo.core.exception.ForbiddenException.class);
+            assertThat(other.getIsDeleted()).isEqualTo(YNType.N);
+            then(scheduleRepository).should(never()).save(any(Schedule.class));
+        }
+
+        @Test
+        @DisplayName("실패 - 내 일정을 남의 이름으로 넘기는 수정도 SCHEDULE:MANAGE 없이는 403")
+        void updateScheduleFailReassign() {
+            Schedule mine = existing("userA", 1L);
+            given(scheduleRepository.findByRowId(1L)).willReturn(Optional.of(mine));
+
+            assertThatThrownBy(() -> scheduleService.updateSchedule(1L, dataFor("userB"), "userA", false))
+                    .isInstanceOf(io.groo.core.exception.ForbiddenException.class);
+            assertThat(mine.getIsDeleted()).isEqualTo(YNType.N);
+        }
+
+        @Test
+        @DisplayName("성공 - SCHEDULE:MANAGE 가 있으면 남의 일정도 고친다")
+        void updateScheduleSuccessByManager() {
+            Schedule other = existing("userB", 1L);
+            given(scheduleRepository.findByRowId(1L)).willReturn(Optional.of(other));
+            given(userService.checkUserExist("userB")).willReturn(createTestUser("userB"));
+
+            scheduleService.updateSchedule(1L, dataFor("userB"), "admin", true);
+
+            assertThat(other.getIsDeleted()).isEqualTo(YNType.Y);
+            then(scheduleRepository).should().save(any(Schedule.class));
         }
     }
 

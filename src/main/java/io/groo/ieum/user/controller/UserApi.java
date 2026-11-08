@@ -129,7 +129,8 @@ public interface UserApi {
                     required = true,
                     content = @Content(schema = @Schema(implementation = UserApiDto.EditUserReq.class))
             )
-            @Valid @RequestBody UserApiDto.EditUserReq data
+            @Valid @RequestBody UserApiDto.EditUserReq data,
+            @Parameter(hidden = true) @LoginUser User loginUser
     );
 
     @Operation(

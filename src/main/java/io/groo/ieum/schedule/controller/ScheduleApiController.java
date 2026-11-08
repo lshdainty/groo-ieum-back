@@ -60,7 +60,9 @@ public class ScheduleApiController implements ScheduleApi {
                         .desc(data.getScheduleDesc())
                         .startDate(data.getStartDate())
                         .endDate(data.getEndDate())
-                        .build()
+                        .build(),
+                loginUser.getId(),
+                hasScheduleManageAuthority()
         );
 
         return ApiResponse.success(new ScheduleApiDto.UpdateScheduleResp(newScheduleId));
