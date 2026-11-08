@@ -317,7 +317,10 @@ public class UserServiceImpl implements UserService {
 
         String physicalFilename = FileUtils.generatePhysicalFilename(originalFilename, uuid);
 
-        FileUtils.save(file, tempPath, physicalFilename, messageResolver);
+        if (!FileUtils.save(file, tempPath, physicalFilename, messageResolver)) {
+            log.warn("프로필 이미지 임시 저장 실패: filename={}", originalFilename);
+            throw new InvalidValueException(ErrorCode.INVALID_PARAMETER);
+        }
 
         String absolutePath = Paths.get(tempPath, physicalFilename).toString();
 

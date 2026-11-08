@@ -642,6 +642,25 @@ class UserServiceTest {
                 assertThat(result.getProfileUUID()).isNotNull();
             }
         }
+
+        @Test
+        @DisplayName("실패 - 저장이 거절되면(false) 200 대신 오류를 던진다")
+        void saveProfileImgRejected() {
+            MockMultipartFile mockFile = new MockMultipartFile("file", "test.jpg", "image/jpeg", "test".getBytes());
+            String physicalFilename = "test.jpg_some-uuid";
+
+            try (MockedStatic<FileUtils> mocked = mockStatic(FileUtils.class)) {
+                mocked.when(() -> FileUtils.getExtension(anyString())).thenReturn("jpg");
+                mocked.when(() -> FileUtils.generatePhysicalFilename(eq("test.jpg"), anyString()))
+                        .thenReturn(physicalFilename);
+                mocked.when(() -> FileUtils.save(eq(mockFile), anyString(), eq(physicalFilename), eq(messageResolver)))
+                        .thenReturn(false);
+
+                org.junit.jupiter.api.Assertions.assertThrows(
+                        io.groo.core.exception.InvalidValueException.class,
+                        () -> userService.saveProfileImgInTempFolder(mockFile));
+            }
+        }
     }
 
     // SSO 분리로 인해 유저 초대/초대 재전송/초대된 유저 수정 테스트는 porest-sso로 이동됨
