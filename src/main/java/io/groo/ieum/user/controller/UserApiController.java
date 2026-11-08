@@ -350,6 +350,7 @@ public class UserApiController implements UserApi {
     // ==================== 초대 관련 API ====================
 
     @Override
+    @PreAuthorize("hasAuthority('USER:MANAGE')")
     @AuditAccess(action = AccessAction.CREATE, targetType = "USER", targetId = "#data.userId",
             detail = "사용자 초대")
     public ApiResponse inviteUser(UserApiDto.InviteUserReq data) {
