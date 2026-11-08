@@ -64,7 +64,8 @@ public interface UserApi {
     @GetMapping("/api/v1/users/{id}")
     ApiResponse searchUser(
             @Parameter(description = "사용자 ID", example = "user123", required = true)
-            @PathVariable("id") String userId
+            @PathVariable("id") String userId,
+            @Parameter(hidden = true) @LoginUser User loginUser
     );
 
     @Operation(

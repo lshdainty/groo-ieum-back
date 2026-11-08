@@ -949,6 +949,21 @@ public class VacationServiceImpl implements VacationService {
                 throw new InvalidValueException(ErrorCode.INVALID_PARAMETER);
             }
 
+            // 6-4-1. 승인자는 신청자의 상위 부서장 사슬 안에서만 고를 수 있다 (결재선 우회 방지)
+            Set<String> chainHeadIds = availableApproverDepartments.stream()
+                    .filter(dept -> dept.getHeadUser() != null)
+                    .map(dept -> dept.getHeadUser().getId())
+                    .collect(Collectors.toSet());
+
+            List<String> outOfChainApprovers = approverIds.stream()
+                    .filter(id -> !chainHeadIds.contains(id))
+                    .collect(Collectors.toList());
+
+            if (!outOfChainApprovers.isEmpty()) {
+                log.warn("휴가 신청 실패 - 결재선에 없는 승인자: userId={}, outOfChainApprovers={}", userId, outOfChainApprovers);
+                throw new InvalidValueException(ErrorCode.INVALID_PARAMETER);
+            }
+
             // 6-5. 승인자를 부서 레벨 순서로 정렬 (레벨 오름차순: 하위 부서장 먼저)
             Map<String, Department> approverDepartmentMap = departments.stream()
                     .filter(dept -> dept.getHeadUser() != null)

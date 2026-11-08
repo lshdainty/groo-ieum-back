@@ -2,6 +2,7 @@ package io.groo.ieum.user.service;
 
 import io.groo.core.exception.EntityNotFoundException;
 import io.groo.core.exception.ForbiddenException;
+import io.groo.core.exception.ErrorCode;
 import io.groo.core.exception.InvalidValueException;
 import io.groo.ieum.client.sso.SsoApiClient;
 import io.groo.ieum.client.sso.dto.SsoInvitationStatusResponse;
@@ -622,6 +623,12 @@ public class UserServiceImpl implements UserService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new EntityNotFoundException(HrErrorCode.USER_NOT_FOUND));
 
+        // 초대 수정은 아직 수락하지 않은(PENDING) 초대에만 허용한다 — 가입을 마친 사용자는 본인 정보 수정 경로를 쓴다
+        if (!isInvitationPending(user)) {
+            log.warn("초대 수정 거부 - 대기 중인 초대가 아님: userId={}", userId);
+            throw new InvalidValueException(ErrorCode.INVALID_PARAMETER);
+        }
+
         // 정보 수정 (비밀번호 제외 필드만)
         user.updateUser(
                 null, // userId - SSO 관리 필드이므로 HR에서 변경하지 않음
@@ -650,6 +657,15 @@ public class UserServiceImpl implements UserService {
                 .joinDate(user.getJoinDate())
                 .countryCode(user.getCountryCode())
                 .build();
+    }
+
+    private boolean isInvitationPending(User user) {
+        if (user.getSsoUserRowId() == null) {
+            return false;
+        }
+        List<SsoInvitationStatusResponse> statusList = ssoApiClient.getInvitationStatus(List.of(user.getSsoUserRowId()));
+        return statusList != null && !statusList.isEmpty()
+                && "PENDING".equals(statusList.get(0).getInvitationStatus());
     }
 
     @Override
