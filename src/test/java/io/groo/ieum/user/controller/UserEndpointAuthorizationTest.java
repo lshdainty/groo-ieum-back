@@ -21,4 +21,16 @@ class UserEndpointAuthorizationTest {
     void joinUserRequiresUserManage() throws Exception {
         assertUserManage("joinUser", UserApiDto.JoinUserReq.class);
     }
+
+    @Test
+    @DisplayName("아이디 중복 확인은 USER:MANAGE 가 있어야 한다 (초대 화면에서만 쓴다)")
+    void checkDuplicateRequiresUserManage() throws Exception {
+        assertUserManage("checkUserIdDuplicate", String.class);
+    }
+
+    @Test
+    @DisplayName("주부서 존재 확인은 USER:MANAGE 가 있어야 한다 (부서 이동 관리 화면에서만 쓴다)")
+    void mainDepartmentExistenceRequiresUserManage() throws Exception {
+        assertUserManage("checkUserMainDepartmentExistence", String.class);
+    }
 }
