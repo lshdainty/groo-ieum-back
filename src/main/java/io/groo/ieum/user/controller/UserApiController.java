@@ -106,6 +106,13 @@ public class UserApiController implements UserApi {
         ));
     }
 
+    private boolean hasAuthority(String authority) {
+        org.springframework.security.core.Authentication authentication =
+                org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        return authentication != null
+                && authentication.getAuthorities().stream().anyMatch(auth -> authority.equals(auth.getAuthority()));
+    }
+
     private boolean canReadAnyUser() {
         org.springframework.security.core.Authentication authentication =
                 org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
@@ -296,7 +303,12 @@ public class UserApiController implements UserApi {
      * GET /api/v1/users/{userId}/approvers
      */
     @Override
-    public ApiResponse getUserApprovers(String userId) {
+    public ApiResponse getUserApprovers(String userId, @LoginUser User loginUser) {
+        // 본인의 승인권자이거나 사용자/휴가 관리 권한이 있을 때만 본다
+        if (!loginUser.getId().equals(userId) && !canReadAnyUser() && !hasAuthority("VACATION:MANAGE")) {
+            log.warn("승인권자 조회 거부 - 로그인 유저: {}, 대상 유저: {}", loginUser.getId(), userId);
+            throw new ForbiddenException(HrErrorCode.PERMISSION_DENIED);
+        }
         List<UserServiceDto> approvers = userService.getUserApprovers(userId);
 
         List<UserApiDto.ApproverDetailResp> approverDetails = approvers.stream()

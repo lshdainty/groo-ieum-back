@@ -103,6 +103,7 @@ public class VacationApiController implements VacationApi {
     @Override
     @PreAuthorize("hasAuthority('VACATION:READ')")
     public ApiResponse getAllUsersVacationHistory() {
+        requireVacationManageOrApprove();
         List<VacationServiceDto> usersVacations = vacationService.getAllUsersVacationHistory();
 
         List<VacationApiDto.GetAllUsersVacationHistoryResp> resp = usersVacations.stream()
@@ -218,6 +219,7 @@ public class VacationApiController implements VacationApi {
     @Override
     @PreAuthorize("hasAuthority('VACATION:READ')")
     public ApiResponse getVacationUsagesByPeriod(LocalDateTime startDate, LocalDateTime endDate) {
+        requireVacationManageOrApprove();
         List<VacationServiceDto> histories = vacationService.getVacationUsagesByPeriod(startDate, endDate);
 
         List<VacationApiDto.GetVacationUsagesByPeriodResp> resp = histories.stream()
@@ -239,7 +241,8 @@ public class VacationApiController implements VacationApi {
 
     @Override
     @PreAuthorize("hasAuthority('VACATION:READ')")
-    public ApiResponse getUserVacationUsagesByPeriod(String userId, LocalDateTime startDate, LocalDateTime endDate) {
+    public ApiResponse getUserVacationUsagesByPeriod(String userId, LocalDateTime startDate, LocalDateTime endDate, @LoginUser User loginUser) {
+        validateVacationReadAccess(loginUser.getId(), userId);
         List<VacationServiceDto> histories = vacationService.getUserVacationUsagesByPeriod(userId, startDate, endDate);
 
         List<VacationApiDto.GetUserVacationUsagesByPeriodResp> resp = histories.stream()
@@ -791,6 +794,15 @@ public class VacationApiController implements VacationApi {
         if (!loginUserId.equals(targetUserId) && !hasAuthority("VACATION:MANAGE") && !hasAuthority("VACATION:APPROVE")) {
             log.warn("휴가 조회 거부 - 로그인 유저: {}, 대상 유저: {}", loginUserId, targetUserId);
             throw new ForbiddenException(HrErrorCode.VACATION_ACCESS_DENIED);
+        }
+    }
+
+    /**
+     * 전 직원의 휴가 기록을 한꺼번에 내리는 API 는 휴가 관리 · 휴가 승인 권한자만 부른다
+     */
+    private void requireVacationManageOrApprove() {
+        if (!hasAuthority("VACATION:MANAGE") && !hasAuthority("VACATION:APPROVE")) {
+            throw new ForbiddenException(HrErrorCode.PERMISSION_DENIED);
         }
     }
 

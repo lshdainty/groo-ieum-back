@@ -103,4 +103,19 @@ class UserReadAccessTest {
         org.assertj.core.api.Assertions.assertThat(r.getInvitationStatus()).isEqualTo("ACTIVE");
         org.assertj.core.api.Assertions.assertThat(r.getJoinDate()).isEqualTo(LocalDate.of(2020, 1, 1));
     }
+
+    @Test
+    @DisplayName("거절 - 남의 승인권자 목록은 본인 · 사용자 관리 · 휴가 관리 권한자만 본다")
+    void approversOfOthers() {
+        loginWith("USER:READ");
+        assertThatThrownBy(() -> controller.getUserApprovers("other", me)).isInstanceOf(ForbiddenException.class);
+        verifyNoInteractions(userService);
+
+        given(userService.getUserApprovers(org.mockito.ArgumentMatchers.anyString())).willReturn(java.util.List.of());
+        assertThatCode(() -> controller.getUserApprovers("me", me)).doesNotThrowAnyException();
+        loginWith("VACATION:MANAGE");
+        assertThatCode(() -> controller.getUserApprovers("other", me)).doesNotThrowAnyException();
+        loginWith("USER:MANAGE");
+        assertThatCode(() -> controller.getUserApprovers("other", me)).doesNotThrowAnyException();
+    }
 }

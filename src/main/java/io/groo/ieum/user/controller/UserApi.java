@@ -244,7 +244,8 @@ public interface UserApi {
     @GetMapping("/api/v1/users/{userId}/approvers")
     ApiResponse getUserApprovers(
             @Parameter(description = "사용자 ID", example = "user123", required = true)
-            @PathVariable("userId") String userId
+            @PathVariable("userId") String userId,
+            @Parameter(hidden = true) @LoginUser User loginUser
     );
 
     // ==================== 초대 관련 API ====================
