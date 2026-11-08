@@ -129,6 +129,9 @@ public class UserApiController implements UserApi {
     public ApiResponse searchUsers() {
         List<UserServiceDto> users = userService.searchUsers();
 
+        // 사용자/권한 관리 권한자는 전체 응답, 그 외에는 화면(달력 · 일정 · 생일 회비 · 회사 통계)이 쓰는 칸만 내린다
+        boolean fullView = canReadAnyUser();
+
         List<UserApiDto.SearchUserResp> resps = users.stream()
                 .map(u -> {
                     // 역할 상세 정보 변환 (null 체크)
@@ -156,25 +159,25 @@ public class UserApiController implements UserApi {
                     return new UserApiDto.SearchUserResp(
                             u.getId(),
                             u.getName(),
-                            u.getEmail(),
+                            fullView ? u.getEmail() : null,
                             u.getBirth(),
                             u.getWorkTime(),
-                            u.getJoinDate(),
-                            roleDetails,
-                            roleNames,
+                            fullView ? u.getJoinDate() : null,
+                            fullView ? roleDetails : List.of(),
+                            fullView ? roleNames : List.of(),
                             roleNames.isEmpty() ? null : roleNames.get(0),
-                            allPermissions,
+                            fullView ? allPermissions : List.of(),
                             u.getCompany(),
                             getTranslatedName(u.getCompany()),
-                            u.getLunarYN(),
+                            fullView ? u.getLunarYN() : null,
                             u.getProfileUrl(),
                             u.getMainDepartmentNameKR(),
-                            u.getDashboard(),
-                            u.getCountryCode(),
-                            u.getInvitationSentAt(),
-                            u.getInvitationExpiresAt(),
-                            u.getInvitationStatus(),
-                            u.getRegisteredAt()
+                            fullView ? u.getDashboard() : null,
+                            fullView ? u.getCountryCode() : null,
+                            fullView ? u.getInvitationSentAt() : null,
+                            fullView ? u.getInvitationExpiresAt() : null,
+                            fullView ? u.getInvitationStatus() : null,
+                            fullView ? u.getRegisteredAt() : null
                     );
                 })
                 .collect(Collectors.toList());
