@@ -88,7 +88,9 @@ public class TokenExchangeService {
         List<String> permissions = user.getAllAuthorities();
 
         // 7. HR JWT 발급
-        String hrToken = jwtTokenProvider.createHrAccessToken(user, roles, permissions);
+        //    SSO 가 임시 비밀번호 상태로 표시한 사용자는 pwdChange=Y 를 HR 토큰에 옮겨 싣는다
+        boolean passwordChangeRequired = jwtTokenProvider.isPasswordChangeRequiredFromSsoToken(ssoToken);
+        String hrToken = jwtTokenProvider.createHrAccessToken(user, roles, permissions, passwordChangeRequired);
         long expiresIn = jwtTokenProvider.getHrAccessExpirationSeconds();
 
         // 8. 응답 생성

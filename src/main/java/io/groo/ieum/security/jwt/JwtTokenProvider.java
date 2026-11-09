@@ -4,6 +4,7 @@ import io.groo.ieum.common.config.properties.JwtProperties;
 import io.groo.ieum.user.domain.User;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
+import io.jsonwebtoken.JwtBuilder;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
@@ -37,6 +38,9 @@ public class JwtTokenProvider {
     private static final String SSO_TOKEN_TYPE_ACCESS = "access";
     private static final String SSO_AUDIENCE = "porest-services";
     private static final String HR_SERVICE_CODE = "hr";
+    /** 비밀번호 변경 필요 표식 클레임 — SSO access token 과 HR 토큰이 같은 이름·값('Y')을 쓴다. 없으면 N. */
+    private static final String PWD_CHANGE_CLAIM = "pwdChange";
+    private static final String PWD_CHANGE_REQUIRED = "Y";
 
     @PostConstruct
     public void init() {
@@ -136,6 +140,13 @@ public class JwtTokenProvider {
     }
 
     /**
+     * SSO JWT 토큰의 비밀번호 변경 필요 표식. 클레임이 없는 옛 토큰은 false(N).
+     */
+    public boolean isPasswordChangeRequiredFromSsoToken(String token) {
+        return PWD_CHANGE_REQUIRED.equals(getSsoClaims(token).get(PWD_CHANGE_CLAIM, String.class));
+    }
+
+    /**
      * SSO JWT 토큰에서 Claims 추출
      *
      * @param token JWT 토큰
@@ -160,8 +171,18 @@ public class JwtTokenProvider {
      * @return HR Access Token
      */
     public String createHrAccessToken(User user, List<String> roles, List<String> permissions) {
+        return createHrAccessToken(user, roles, permissions, false);
+    }
+
+    /**
+     * HR Access Token 생성 (비밀번호 변경 필요 표식 포함)
+     *
+     * @param passwordChangeRequired true 면 pwdChange=Y 클레임을 싣는다 (강제 변경이 끝날 때까지 다른 API 가 막힌다)
+     */
+    public String createHrAccessToken(User user, List<String> roles, List<String> permissions,
+                                      boolean passwordChangeRequired) {
         return createHrAccessToken(user.getId(), user.getSsoUserRowId(),
-                user.getName(), user.getEmail(), roles, permissions);
+                user.getName(), user.getEmail(), roles, permissions, passwordChangeRequired);
     }
 
     /**
@@ -173,10 +194,17 @@ public class JwtTokenProvider {
     public String createHrAccessToken(String userId, Long ssoUserRowId,
                                       String name, String email,
                                       List<String> roles, List<String> permissions) {
+        return createHrAccessToken(userId, ssoUserRowId, name, email, roles, permissions, false);
+    }
+
+    public String createHrAccessToken(String userId, Long ssoUserRowId,
+                                      String name, String email,
+                                      List<String> roles, List<String> permissions,
+                                      boolean passwordChangeRequired) {
         Date now = new Date();
         Date expiration = new Date(now.getTime() + jwtProperties.getHrAccessExpiration());
 
-        return Jwts.builder()
+        JwtBuilder builder = Jwts.builder()
                 .id(java.util.UUID.randomUUID().toString())  // jti — 로그아웃 차단 목록의 키
                 .subject(userId)
                 .issuer(HR_ISSUER)
@@ -187,7 +215,11 @@ public class JwtTokenProvider {
                 .claim("name", name)
                 .claim("email", email)
                 .claim("roles", roles)
-                .claim("permissions", permissions)
+                .claim("permissions", permissions);
+        if (passwordChangeRequired) {
+            builder.claim(PWD_CHANGE_CLAIM, PWD_CHANGE_REQUIRED);
+        }
+        return builder
                 .signWith(hrKey)
                 .compact();
     }
@@ -394,5 +426,12 @@ public class JwtTokenProvider {
         Claims claims = getHrClaims(token);
         List<String> permissions = claims.get("permissions", List.class);
         return permissions != null ? permissions : Collections.emptyList();
+    }
+
+    /**
+     * HR JWT 토큰의 비밀번호 변경 필요 표식. 클레임이 없는 옛 토큰은 false(N).
+     */
+    public boolean isPasswordChangeRequiredFromHrToken(String token) {
+        return PWD_CHANGE_REQUIRED.equals(getHrClaims(token).get(PWD_CHANGE_CLAIM, String.class));
     }
 }
