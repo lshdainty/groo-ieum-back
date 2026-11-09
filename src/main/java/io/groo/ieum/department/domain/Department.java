@@ -185,6 +185,14 @@ public class Department extends AuditingFieldsWithIp {
     }
 
     /**
+     * 부서 레벨 변경<br>
+     * 상위 부서가 바뀔 때 서비스가 새 상위 레벨 + 1 로 다시 센 값을 넣는다.
+     */
+    public void changeLevel(Long level) {
+        this.level = level;
+    }
+
+    /**
      * 부서 삭제 함수<br>
      * Entity의 경우 Setter없이 Getter만 사용<br>
      * 해당 메소드를 통해 부서 삭제할 것

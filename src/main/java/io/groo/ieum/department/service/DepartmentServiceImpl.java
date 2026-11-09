@@ -108,6 +108,11 @@ public class DepartmentServiceImpl implements DepartmentService {
             headUser = userService.checkUserExist(data.getHeadUserId());
         }
 
+        // 상위 부서가 실제로 바뀌는지 (같은 상위를 다시 보내는 것은 바뀐 것이 아니다)
+        boolean parentChanged = newParent != null
+                && (department.getParent() == null
+                || !department.getParent().getRowId().equals(newParent.getRowId()));
+
         department.updateDepartment(
                 data.getName(),
                 data.getNameKR(),
@@ -118,6 +123,12 @@ public class DepartmentServiceImpl implements DepartmentService {
                 data.getColor()
         );
 
+        // 상위가 바뀌면 단계(level)를 서버가 다시 센다 - 이 부서 = 새 상위 + 1, 지우지 않은 자손은 부모 + 1
+        // (결재 순서 정렬이 부서 level 을 쓰므로 자손 단계가 옛 값으로 남으면 순서가 조용히 어긋난다)
+        if (parentChanged) {
+            department.changeLevel(levelOf(newParent) + 1);
+            recalculateDescendantLevels(department);
+        }
         log.info("부서 수정 완료: id={}", data.getId());
     }
 
@@ -299,6 +310,22 @@ public class DepartmentServiceImpl implements DepartmentService {
             throw new EntityNotFoundException(HrErrorCode.DEPARTMENT_NOT_FOUND);
         }
         return department.get();
+    }
+
+    private long levelOf(Department department) {
+        return department.getLevel() == null ? 0L : department.getLevel();
+    }
+
+    /**
+     * 자손 단계 다시 세기: 지우지 않은 자식은 부모 level + 1, 나무 깊이만큼 내려간다.
+     */
+    private void recalculateDescendantLevels(Department parent) {
+        for (Department child : parent.getChildren()) {
+            if (YNType.isN(child.getIsDeleted())) {
+                child.changeLevel(levelOf(parent) + 1);
+                recalculateDescendantLevels(child);
+            }
+        }
     }
 
     /**
