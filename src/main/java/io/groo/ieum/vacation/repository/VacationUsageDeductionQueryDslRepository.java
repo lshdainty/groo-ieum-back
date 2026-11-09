@@ -60,6 +60,7 @@ public class VacationUsageDeductionQueryDslRepository implements VacationUsageDe
                 .join(vacationUsageDeduction.usage).fetchJoin()
                 .join(vacationUsageDeduction.grant).fetchJoin()
                 .where(vacationUsageDeduction.usage.rowId.in(usageIds))
+                .orderBy(vacationUsageDeduction.rowId.asc())
                 .fetch();
     }
 }

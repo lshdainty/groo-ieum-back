@@ -225,6 +225,7 @@ public class VacationServiceImpl implements VacationService {
         return VacationServiceDto.builder()
                 .grants(grants)
                 .usages(usages)
+                .usageVacationTypes(findFirstGrantTypesByUsage(usages))
                 .build();
     }
 
@@ -236,6 +237,9 @@ public class VacationServiceImpl implements VacationService {
 
         // 모든 사용 내역 조회
         List<VacationUsage> allUsages = vacationUsageRepository.findAllWithUser();
+
+        // 사용 내역별 휴가 종류 (차감 질의 1번)
+        Map<Long, VacationType> usageTypes = findFirstGrantTypesByUsage(allUsages);
 
         // User별로 Grant 그룹핑
         Map<String, List<VacationGrant>> grantsByUser = allGrants.stream()
@@ -269,6 +273,7 @@ public class VacationServiceImpl implements VacationService {
                             .user(user)
                             .grants(grants)
                             .usages(usages)
+                            .usageVacationTypes(usageTypes)
                             .build();
                 })
                 .toList();
@@ -372,21 +377,8 @@ public class VacationServiceImpl implements VacationService {
             return List.of();
         }
 
-        // 2. 모든 usage ID 추출
-        List<Long> usageIds = usages.stream()
-                .map(VacationUsage::getRowId)
-                .toList();
-
-        // 3. IN 쿼리로 한번에 모든 deduction 조회
-        List<VacationUsageDeduction> allDeductions = vacationUsageDeductionRepository.findByUsageIds(usageIds);
-
-        // 4. usageId -> VacationType 매핑 (첫 번째 grant의 type)
-        Map<Long, VacationType> vacationTypeMap = allDeductions.stream()
-                .collect(Collectors.toMap(
-                        d -> d.getUsage().getRowId(),
-                        d -> d.getGrant().getType(),
-                        (existing, replacement) -> existing
-                ));
+        // 2. usageId -> VacationType 매핑 (첫 번째 차감 grant의 type)
+        Map<Long, VacationType> vacationTypeMap = findFirstGrantTypesByUsage(usages);
 
         // 5. VacationServiceDto로 변환
         return usages.stream()
@@ -401,6 +393,23 @@ public class VacationServiceImpl implements VacationService {
                         .type(vacationTypeMap.get(usage.getRowId()))
                         .build())
                 .toList();
+    }
+
+    /**
+     * 사용 내역별 휴가 종류를 구한다. 사용 하나의 첫 번째 차감이 가리키는 부여의 종류다.
+     * 차감은 사용 id 들로 한 번에 읽는다(줄마다 질의하지 않는다). 차감이 없는 사용은 맵에 없다.
+     */
+    private Map<Long, VacationType> findFirstGrantTypesByUsage(List<VacationUsage> usages) {
+        if (usages == null || usages.isEmpty()) {
+            return Map.of();
+        }
+        List<Long> usageIds = usages.stream().map(VacationUsage::getRowId).toList();
+        return vacationUsageDeductionRepository.findByUsageIds(usageIds).stream()
+                .collect(Collectors.toMap(
+                        d -> d.getUsage().getRowId(),
+                        d -> d.getGrant().getType(),
+                        (existing, replacement) -> existing
+                ));
     }
 
     @Override

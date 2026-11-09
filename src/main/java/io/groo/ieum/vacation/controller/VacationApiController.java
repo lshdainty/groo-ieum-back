@@ -93,7 +93,9 @@ public class VacationApiController implements VacationApi {
                         u.getUsedTime(),
                         vacationTimeFormatter.format(u.getUsedTime()),
                         u.getStartDate(),
-                        u.getEndDate()
+                        u.getEndDate(),
+                        usageTypeOf(vacationInfo, u.getRowId()),
+                        getTranslatedName(usageTypeOf(vacationInfo, u.getRowId()))
                 ))
                 .toList();
 
@@ -136,7 +138,9 @@ public class VacationApiController implements VacationApi {
                                             u.getUsedTime(),
                                             vacationTimeFormatter.format(u.getUsedTime()),
                                             u.getStartDate(),
-                                            u.getEndDate()
+                                            u.getEndDate(),
+                                            usageTypeOf(dto, u.getRowId()),
+                                            getTranslatedName(usageTypeOf(dto, u.getRowId()))
                                     ))
                                     .toList();
 
@@ -779,6 +783,11 @@ public class VacationApiController implements VacationApi {
                 .toList();
 
         return ApiResponse.success(resp);
+    }
+
+    /** 사용 내역의 휴가 종류(첫 차감 부여의 종류). 차감이 없으면 null. */
+    private VacationType usageTypeOf(VacationServiceDto dto, Long usageId) {
+        return dto.getUsageVacationTypes() == null ? null : dto.getUsageVacationTypes().get(usageId);
     }
 
     private String getTranslatedName(DisplayType type) {
