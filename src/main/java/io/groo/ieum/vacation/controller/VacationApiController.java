@@ -386,6 +386,15 @@ public class VacationApiController implements VacationApi {
 
     @Override
     @PreAuthorize("hasAuthority('VACATION:MANAGE')")
+    public ApiResponse updateVacationPolicy(Long vacationPolicyId, VacationApiDto.UpdateVacationPolicyReq data) {
+        Long updatedPolicyId = vacationService.updateVacationPolicy(
+                vacationPolicyId, data.getVacationPolicyName(), data.getVacationPolicyDesc());
+
+        return ApiResponse.success(new VacationApiDto.UpdateVacationPolicyResp(updatedPolicyId));
+    }
+
+    @Override
+    @PreAuthorize("hasAuthority('VACATION:MANAGE')")
     public ApiResponse deleteVacationPolicy(Long vacationPolicyId) {
         Long deletedPolicyId = vacationService.deleteVacationPolicy(vacationPolicyId);
 

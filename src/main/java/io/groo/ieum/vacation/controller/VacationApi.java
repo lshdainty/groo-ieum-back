@@ -332,6 +332,45 @@ public interface VacationApi {
     ApiResponse getVacationPolicies();
 
     @Operation(
+            summary = "휴가 정책 이름 · 설명 수정",
+            description = "휴가 정책의 이름과 설명만 수정합니다. 부여 방법 · 시간 · 반복 등 부여 규칙은 바꾸지 않으며, 이미 받은 휴가에도 닿지 않습니다."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "휴가 정책 수정 성공",
+                    content = @Content(schema = @Schema(implementation = VacationApiDto.UpdateVacationPolicyResp.class))
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "400",
+                    description = "이름이 비었거나 50자 초과 / 설명이 1000자 초과 (INVALID_PARAMETER)"
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "403",
+                    description = "권한 없음 (VACATION:MANAGE 필요)"
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404",
+                    description = "휴가 정책을 찾을 수 없음 (삭제된 정책 포함)"
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "409",
+                    description = "같은 이름의 휴가 정책이 있음 (VACATION_POLICY_NAME_DUPLICATE)"
+            )
+    })
+    @PutMapping("/api/v1/vacation-policies/{id}")
+    ApiResponse updateVacationPolicy(
+            @Parameter(description = "휴가 정책 ID", example = "1", required = true)
+            @PathVariable("id") Long vacationPolicyId,
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                    description = "수정할 이름 · 설명",
+                    required = true,
+                    content = @Content(schema = @Schema(implementation = VacationApiDto.UpdateVacationPolicyReq.class))
+            )
+            @Valid @RequestBody VacationApiDto.UpdateVacationPolicyReq data
+    );
+
+    @Operation(
             summary = "휴가 정책 삭제",
             description = "특정 휴가 정책을 삭제합니다."
     )

@@ -1,6 +1,8 @@
 package io.groo.ieum.vacation.service.policy;
 
+import io.groo.core.exception.DuplicateException;
 import io.groo.core.exception.ErrorCode;
+import io.groo.ieum.common.exception.HrErrorCode;
 import io.groo.core.exception.InvalidValueException;
 import io.groo.core.type.YNType;
 import io.groo.ieum.vacation.domain.VacationPolicy;
@@ -55,7 +57,7 @@ public class OnRequest implements VacationPolicyStrategy {
 
         // 2. 정책명 중복 검증
         if (vacationPolicyRepository.existsByName(data.getName())) {
-            throw new InvalidValueException(ErrorCode.INVALID_PARAMETER);
+            throw new DuplicateException(HrErrorCode.VACATION_POLICY_NAME_DUPLICATE);
         }
 
         // 3. isFlexibleGrant 필수 검증

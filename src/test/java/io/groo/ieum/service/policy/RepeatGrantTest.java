@@ -1,6 +1,8 @@
 package io.groo.ieum.service.policy;
 
+import io.groo.core.exception.DuplicateException;
 import io.groo.core.exception.InvalidValueException;
+import io.groo.ieum.common.exception.HrErrorCode;
 import io.groo.core.type.YNType;
 import io.groo.ieum.vacation.domain.VacationPolicy;
 import io.groo.ieum.vacation.repository.VacationPolicyRepository;
@@ -42,6 +44,23 @@ class RepeatGrantTest {
     @Nested
     @DisplayName("휴가 정책 등록")
     class RegistVacationPolicy {
+        @Test
+        @DisplayName("실패 - 중복된 정책명이면 VACATION_POLICY_NAME_DUPLICATE 예외가 발생한다")
+        void registPolicyFailDuplicateName() {
+            // given
+            VacationPolicyServiceDto dto = VacationPolicyServiceDto.builder()
+                    .name("연차")
+                    .vacationType(VacationType.ANNUAL)
+                    .build();
+
+            given(vacationPolicyRepository.existsByName("연차")).willReturn(true);
+
+            // when & then
+            assertThatThrownBy(() -> repeatGrant.registVacationPolicy(dto))
+                    .isInstanceOf(DuplicateException.class)
+                    .extracting("errorCode").isEqualTo(HrErrorCode.VACATION_POLICY_NAME_DUPLICATE);
+        }
+
         @Test
         @DisplayName("성공 - 매년 반복 정책을 등록한다")
         void registYearlyPolicySuccess() {

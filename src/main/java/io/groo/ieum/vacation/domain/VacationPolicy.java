@@ -227,6 +227,15 @@ public class VacationPolicy extends AuditingFieldsWithIp {
     @OneToMany(mappedBy = "policy", cascade = CascadeType.ALL)
     private List<VacationGrant> vacationGrants = new ArrayList<>();
 
+    /**
+     * 이름 · 설명 수정<br>
+     * 부여 규칙(방법 · 시간 · 반복 · 유효기간 등)은 이미 받은 휴가와 스케줄에 묶여 있어 바꾸지 않는다.
+     */
+    public void updateNameAndDesc(String name, String desc) {
+        this.name = name;
+        this.desc = desc;
+    }
+
     // 개발용(테스트 데이터 만들때만 사용 운영에선 삭제 예정)
     public void updateCantDeleted() {
         this.canDeleted = YNType.N;

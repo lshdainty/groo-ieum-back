@@ -1,6 +1,7 @@
 package io.groo.ieum.vacation.service;
 
 import io.groo.core.exception.BusinessRuleViolationException;
+import io.groo.core.exception.DuplicateException;
 import io.groo.core.exception.EntityNotFoundException;
 import io.groo.core.exception.ForbiddenException;
 import io.groo.core.exception.ErrorCode;
@@ -690,6 +691,43 @@ public class VacationServiceImpl implements VacationService {
                 revokedGrantCount, vacationPolicyId);
         log.info("Deleted vacation policy {}", vacationPolicyId);
 
+        return vacationPolicyId;
+    }
+
+    @Transactional
+    @Override
+    public Long updateVacationPolicy(Long vacationPolicyId, String name, String desc) {
+        log.debug("휴가 정책 수정 시작: vacationPolicyId={}", vacationPolicyId);
+        // 1. 존재 확인 + 지운 정책은 없는 것으로 본다 (findByRowId 는 지운 정책도 돌려준다)
+        VacationPolicy policy = validateAndGetVacationPolicy(vacationPolicyId);
+        if (YNType.isY(policy.getIsDeleted())) {
+            log.warn("휴가 정책 수정 실패 - 삭제된 정책: vacationPolicyId={}", vacationPolicyId);
+            throw new EntityNotFoundException(HrErrorCode.VACATION_POLICY_NOT_FOUND);
+        }
+
+        // 2. 이름 · 설명 검증 (varchar(50) · varchar(1000))
+        String trimmedName = name == null ? null : name.trim();
+        if (trimmedName == null || trimmedName.isEmpty() || trimmedName.length() > 50) {
+            log.warn("휴가 정책 수정 실패 - 이름 길이: vacationPolicyId={}", vacationPolicyId);
+            throw new InvalidValueException(ErrorCode.INVALID_PARAMETER);
+        }
+        String trimmedDesc = desc == null ? null : desc.trim();
+        if (trimmedDesc != null && trimmedDesc.length() > 1000) {
+            log.warn("휴가 정책 수정 실패 - 설명 길이: vacationPolicyId={}", vacationPolicyId);
+            throw new InvalidValueException(ErrorCode.INVALID_PARAMETER);
+        }
+        if (trimmedDesc != null && trimmedDesc.isEmpty()) {
+            trimmedDesc = null;
+        }
+
+        // 3. 지우지 않은 다른 정책과 이름 중복 (자기 자신 제외)
+        if (vacationPolicyRepository.existsByNameAndRowIdNot(trimmedName, vacationPolicyId)) {
+            log.warn("휴가 정책 수정 실패 - 이름 중복: vacationPolicyId={}", vacationPolicyId);
+            throw new DuplicateException(HrErrorCode.VACATION_POLICY_NAME_DUPLICATE);
+        }
+
+        policy.updateNameAndDesc(trimmedName, trimmedDesc);
+        log.info("휴가 정책 수정 완료: vacationPolicyId={}", vacationPolicyId);
         return vacationPolicyId;
     }
 

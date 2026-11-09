@@ -11,6 +11,8 @@ import io.groo.ieum.vacation.type.RepeatUnit;
 import io.groo.ieum.vacation.type.VacationTimeType;
 import io.groo.ieum.vacation.type.VacationType;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import tools.jackson.databind.PropertyNamingStrategies;
@@ -358,6 +360,30 @@ public class VacationApiDto {
         private EffectiveType effectiveType;
         private ExpirationType expirationType;
         private String repeatGrantDescription; // 반복 부여 정책의 한국어 설명
+    }
+
+    @Getter
+    @AllArgsConstructor
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    @Schema(description = "휴가 정책 이름 · 설명 수정 요청 (부여 규칙은 받지 않는다)")
+    public static class UpdateVacationPolicyReq {
+        @Schema(description = "휴가 정책 이름 (앞뒤 공백 제거, 1 ~ 50자)", example = "연차", requiredMode = Schema.RequiredMode.REQUIRED)
+        @NotBlank
+        @Size(max = 50)
+        private String vacationPolicyName;
+
+        @Schema(description = "휴가 정책 설명 (0 ~ 1000자, 빈 글이면 지운다)", example = "연간 부여되는 기본 연차")
+        @Size(max = 1000)
+        private String vacationPolicyDesc;
+    }
+
+    @Getter
+    @AllArgsConstructor
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    @Schema(description = "휴가 정책 이름 · 설명 수정 응답")
+    public static class UpdateVacationPolicyResp {
+        @Schema(description = "휴가 정책 ID", example = "1")
+        private Long vacationPolicyId;
     }
 
     @Getter

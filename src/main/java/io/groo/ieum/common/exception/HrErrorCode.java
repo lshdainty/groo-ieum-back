@@ -42,6 +42,7 @@ public enum HrErrorCode implements ErrorCodeProvider {
     VACATION_SELF_APPROVAL_NOT_ALLOWED("VACATION_011", "error.vacation.self.approval.not.allowed", HttpStatus.BAD_REQUEST),
     VACATION_MINUTE_USAGE_NOT_ALLOWED("VACATION_012", "error.vacation.minute.usage.not.allowed", HttpStatus.BAD_REQUEST),
     VACATION_ACCESS_DENIED("VACATION_013", "error.vacation.access.denied", HttpStatus.FORBIDDEN),
+    VACATION_POLICY_NAME_DUPLICATE("VACATION_014", "error.duplicate.vacation.policy.name", HttpStatus.CONFLICT),
 
     // ========================================
     // VACATION PLAN (휴가 플랜)
