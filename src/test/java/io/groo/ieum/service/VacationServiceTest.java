@@ -385,6 +385,30 @@ class VacationServiceTest {
     }
 
     @Nested
+    @DisplayName("휴가 정책 응답의 삭제 가능 여부(can_deleted)")
+    class VacationPolicyCanDeleted {
+        @Test
+        @DisplayName("성공 - 목록 · 단건 모두 정책의 canDeleted 값을 그대로 싣는다 (직접 부여 기본 정책 N · 그 밖 Y)")
+        void carriesCanDeleted() {
+            VacationPolicy basic = createTestPolicy();
+            basic.updateCantDeleted();
+            ReflectionTestUtils.setField(basic, "rowId", 1L);
+            VacationPolicy custom = createTestPolicy();
+            custom.updateCanDeleted();
+            ReflectionTestUtils.setField(custom, "rowId", 2L);
+            given(vacationPolicyRepository.findVacationPolicies()).willReturn(List.of(basic, custom));
+            given(vacationPolicyRepository.findByRowId(1L)).willReturn(Optional.of(basic));
+            given(vacationPolicyRepository.findByRowId(2L)).willReturn(Optional.of(custom));
+
+            List<VacationPolicyServiceDto> list = vacationService.getVacationPolicies();
+
+            assertThat(list).extracting(VacationPolicyServiceDto::getCanDeleted).containsExactly(YNType.N, YNType.Y);
+            assertThat(vacationService.getVacationPolicy(1L).getCanDeleted()).isEqualTo(YNType.N);
+            assertThat(vacationService.getVacationPolicy(2L).getCanDeleted()).isEqualTo(YNType.Y);
+        }
+    }
+
+    @Nested
     @DisplayName("휴가 정책 수정")
     class UpdateVacationPolicy {
         private VacationPolicy policyOf(Long id, String name) {

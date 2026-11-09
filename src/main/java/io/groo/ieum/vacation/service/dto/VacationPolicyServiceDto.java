@@ -34,5 +34,6 @@ public class VacationPolicyServiceDto {
     private EffectiveType effectiveType;
     private ExpirationType expirationType;
     private Integer approvalRequiredCount;
+    private YNType canDeleted;       // 삭제 가능 여부 (N: 기본 정책이라 지울 수 없음)
     private String repeatGrantDescription; // 반복 부여 정책의 한국어 설명 (예: "매년 1월 1일 부여")
 }

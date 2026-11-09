@@ -351,7 +351,8 @@ public class VacationApiController implements VacationApi {
                 policy.getSpecificDays(),
                 policy.getEffectiveType(),
                 policy.getExpirationType(),
-                policy.getRepeatGrantDescription()
+                policy.getRepeatGrantDescription(),
+                policy.getCanDeleted()
         ));
     }
 
@@ -377,7 +378,8 @@ public class VacationApiController implements VacationApi {
                         vp.getSpecificDays(),
                         vp.getEffectiveType(),
                         vp.getExpirationType(),
-                        vp.getRepeatGrantDescription()
+                        vp.getRepeatGrantDescription(),
+                        vp.getCanDeleted()
                 ))
                 .toList();
 

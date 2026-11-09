@@ -603,6 +603,7 @@ public class VacationServiceImpl implements VacationService {
                 .effectiveType(policy.getEffectiveType())
                 .expirationType(policy.getExpirationType())
                 .repeatGrantDescription(repeatGrantDescription)
+                .canDeleted(policy.getCanDeleted())
                 .build();
     }
 
@@ -634,6 +635,7 @@ public class VacationServiceImpl implements VacationService {
                             .effectiveType(p.getEffectiveType())
                             .expirationType(p.getExpirationType())
                             .repeatGrantDescription(repeatGrantDescription)
+                            .canDeleted(p.getCanDeleted())
                             .build();
                 })
                 .toList();
