@@ -53,7 +53,7 @@ class TokenExchangeServiceTest {
         given(user.getEmail()).willReturn("hong@porest.com");
         given(userService.findUserById("user1")).willReturn(user);
 
-        given(jwtTokenProvider.createHrAccessToken(eq(user), anyList(), anyList())).willReturn("hrToken");
+        given(jwtTokenProvider.createHrAccessToken(eq(user), anyList(), anyList(), eq(false))).willReturn("hrToken");
         given(jwtTokenProvider.getHrAccessExpirationSeconds()).willReturn(3600L);
 
         TokenExchangeDto.ExchangeResult result = sut.exchangeCode("code", "verifier", "https://hr/cb");

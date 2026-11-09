@@ -25,4 +25,11 @@ public interface UserPrincipal extends AuditorPrincipal {
         User user = getUser();
         return user != null ? user.getId() : null;
     }
+
+    /**
+     * 임시 비밀번호 상태(비밀번호 변경 필요) 여부 — 토큰 클레임에서 온 값. 클레임이 없으면 false(N).
+     */
+    default boolean isPasswordChangeRequired() {
+        return false;
+    }
 }

@@ -11,7 +11,16 @@ import io.groo.core.controller.ApiResponse;
 import io.groo.ieum.user.domain.User;
 import io.groo.ieum.user.service.UserService;
 import io.groo.ieum.user.service.dto.UserServiceDto;
+import io.groo.ieum.common.config.properties.JwtProperties;
+import io.groo.ieum.permission.domain.Role;
+import io.groo.ieum.security.jwt.JwtTokenProvider;
+import io.groo.ieum.security.principal.UserPrincipal;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseCookie;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.MessageSource;
 import org.springframework.context.i18n.LocaleContextHolder;
@@ -27,6 +36,8 @@ import java.util.stream.Collectors;
 public class UserApiController implements UserApi {
     private final UserService userService;
     private final MessageSource messageSource;
+    private final JwtTokenProvider jwtTokenProvider;
+    private final JwtProperties jwtProperties;
 
     @Override
     @PreAuthorize("hasAuthority('USER:MANAGE')")
@@ -462,7 +473,8 @@ public class UserApiController implements UserApi {
     // ==================== 비밀번호 관련 API ====================
 
     @Override
-    public ApiResponse changePassword(User loginUser, UserApiDto.ChangePasswordReq data) {
+    public ApiResponse changePassword(User loginUser, UserApiDto.ChangePasswordReq data,
+                                      HttpServletResponse response) {
         log.debug("REST request to change password: {}", loginUser.getId());
 
         userService.changePassword(
@@ -472,7 +484,32 @@ public class UserApiController implements UserApi {
                 data.getNewPasswordConfirm()
         );
 
+        reissueCookieIfPasswordChangeWasRequired(loginUser, response);
+
         return ApiResponse.success();
+    }
+
+    /**
+     * 임시 비밀번호(pwdChange=Y) 상태로 들어온 사용자가 비밀번호를 바꿨으면 표식 없는 새 HR 토큰을 쿠키로 다시 내린다.
+     * 안 내리면 쿠키가 Y 인 채라 강제 변경 화면이 풀리지 않고 다른 API 도 계속 403 이다.
+     */
+    private void reissueCookieIfPasswordChangeWasRequired(User loginUser, HttpServletResponse response) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !(authentication.getPrincipal() instanceof UserPrincipal principal)
+                || !principal.isPasswordChangeRequired()) {
+            return;
+        }
+        List<String> roles = loginUser.getRoles().stream().map(Role::getCode).collect(Collectors.toList());
+        String token = jwtTokenProvider.createHrAccessToken(loginUser, roles, loginUser.getAllAuthorities(), false);
+        // JwtAuthenticationFilter · TokenExchangeController 가 심는 쿠키와 같은 속성 — 병존하지 않게 대체한다
+        ResponseCookie cookie = ResponseCookie.from("hr_access_token", token)
+                .httpOnly(true)
+                .secure(true)
+                .path("/")
+                .maxAge(jwtProperties.getHrAccessExpiration() / 1000)
+                .sameSite("Lax")
+                .build();
+        response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
     }
 
     @Override

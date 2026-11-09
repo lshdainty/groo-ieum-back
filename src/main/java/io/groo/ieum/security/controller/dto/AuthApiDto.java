@@ -22,7 +22,7 @@ public class AuthApiDto {
         private List<String> permissions;      // 모든 권한 코드 목록
         private YNType isLogin;
         private String profileUrl;
-        private YNType passwordChangeRequired; // 비밀번호 변경 필요 여부 (SSO에서 관리)
+        private YNType passwordChangeRequired; // 비밀번호 변경 필요 여부 (토큰 pwdChange 클레임)
     }
 
     @Getter

@@ -48,6 +48,9 @@ class JwtAuthenticationFilterTest {
     @Mock
     private io.groo.ieum.security.service.TokenRevocationService tokenRevocationService;
 
+    @org.mockito.Spy
+    private tools.jackson.databind.ObjectMapper objectMapper = tools.jackson.databind.json.JsonMapper.builder().build();
+
     @InjectMocks
     private JwtAuthenticationFilter filter;
 
@@ -67,7 +70,7 @@ class JwtAuthenticationFilterTest {
         lenient().when(jwtTokenProvider.getPermissionsFromHrToken(TOKEN)).thenReturn(List.of());
         // 갱신 분기에서만 쓰이는 스텁 — 비갱신 테스트에서는 호출되지 않는다.
         lenient().when(jwtProperties.getHrAccessExpiration()).thenReturn(3_600_000L);
-        lenient().when(jwtTokenProvider.createHrAccessToken(any(User.class), anyList(), anyList()))
+        lenient().when(jwtTokenProvider.createHrAccessToken(any(User.class), anyList(), anyList(), org.mockito.ArgumentMatchers.anyBoolean()))
             .thenReturn(RENEWED);
     }
 

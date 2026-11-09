@@ -123,6 +123,7 @@ public enum HrErrorCode implements ErrorCodeProvider {
     // ========================================
     UNSUPPORTED_OAUTH_PROVIDER("AUTH_001", "error.auth.unsupported.provider", HttpStatus.BAD_REQUEST),
     OAUTH_PROVIDER_NOT_LINKED("AUTH_002", "error.oauth.provider.not.linked", HttpStatus.NOT_FOUND),
+    PASSWORD_CHANGE_REQUIRED("AUTH_003", "error.auth.password.change.required", HttpStatus.FORBIDDEN),
 
     // ========================================
     // NOTICE (공지사항)

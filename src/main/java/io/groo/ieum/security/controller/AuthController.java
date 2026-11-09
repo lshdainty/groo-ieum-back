@@ -80,7 +80,7 @@ public class AuthController implements AuthApi {
                 YNType.Y,
                 StringUtils.hasText(user.getProfileName()) && StringUtils.hasText(user.getProfileUUID()) ?
                         userService.generateProfileUrl(user.getProfileName(), user.getProfileUUID()) : null,
-                YNType.N  // 비밀번호 변경 필요 여부 (SSO에서 관리)
+                userPrincipal.isPasswordChangeRequired() ? YNType.Y : YNType.N  // 비밀번호 변경 필요 여부 (SSO 토큰 클레임 → HR 토큰 클레임)
         );
 
         return ApiResponse.success(result);
