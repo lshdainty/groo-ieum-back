@@ -67,6 +67,16 @@ public interface DepartmentService {
     void deleteUserDepartments(List<String> userIds, Long departmentId);
 
     /**
+     * 사용자의 주 부서를 이 부서로 옮깁니다.
+     * 이 부서가 이미 주 부서면 그대로 성공하고, 사용자의 다른 소속은 모두 주 부서가 아니게 됩니다.
+     *
+     * @param departmentId 주 부서로 정할 부서 ID
+     * @param userId 사용자 ID
+     * @throws io.groo.core.exception.EntityNotFoundException 부서가 없거나, 사용자가 이 부서 구성원이 아닌 경우
+     */
+    void changeMainDepartment(Long departmentId, String userId);
+
+    /**
      * 부서에 속한 사용자와 속하지 않은 사용자를 조회합니다.
      *
      * @param departmentId 부서 ID

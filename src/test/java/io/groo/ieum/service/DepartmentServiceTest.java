@@ -537,6 +537,139 @@ class DepartmentServiceTest {
     }
 
     @Nested
+    @DisplayName("주 부서 옮기기")
+    class ChangeMainDepartment {
+        private Company company() {
+            Company company = Company.createCompany("COMPANY001", "회사", "설명");
+            setCompanyId(company, 1L);
+            return company;
+        }
+
+        private Department dept(String name, Long id, Company company) {
+            Department d = Department.createDepartment(name, name, null, null, 1L, "설명", "#FF0000", company);
+            setDepartmentId(d, id);
+            return d;
+        }
+
+        @Test
+        @DisplayName("성공 - 다른 부서가 주 부서인 사람을 이 부서로 옮긴다 (앞 N · 이 Y · 한 사람에 Y 하나)")
+        void movesMainFromOtherDepartment() {
+            Company company = company();
+            Department a = dept("A", 1L, company);
+            Department b = dept("B", 2L, company);
+            Department c = dept("C", 3L, company);
+            User user = createTestUser("user1");
+            UserDepartment inA = UserDepartment.createUserDepartment(user, a, YNType.Y);
+            UserDepartment inB = UserDepartment.createUserDepartment(user, b, YNType.N);
+            UserDepartment inC = UserDepartment.createUserDepartment(user, c, YNType.N);
+            given(departmentRepository.findById(2L)).willReturn(Optional.of(b));
+            given(departmentRepository.findUserDepartment("user1", 2L)).willReturn(Optional.of(inB));
+
+            departmentService.changeMainDepartment(2L, "user1");
+
+            assertThat(inA.getMainYN()).isEqualTo(YNType.N);
+            assertThat(inB.getMainYN()).isEqualTo(YNType.Y);
+            assertThat(inC.getMainYN()).isEqualTo(YNType.N);
+            assertThat(user.getUserDepartments().stream().filter(ud -> ud.getMainYN() == YNType.Y)).hasSize(1);
+        }
+
+        @Test
+        @DisplayName("성공 - 주 부서가 없던 사람은 이 부서가 주 부서가 된다")
+        void setsMainWhenNone() {
+            Company company = company();
+            Department b = dept("B", 2L, company);
+            User user = createTestUser("user1");
+            UserDepartment inB = UserDepartment.createUserDepartment(user, b, YNType.N);
+            given(departmentRepository.findById(2L)).willReturn(Optional.of(b));
+            given(departmentRepository.findUserDepartment("user1", 2L)).willReturn(Optional.of(inB));
+
+            departmentService.changeMainDepartment(2L, "user1");
+
+            assertThat(inB.getMainYN()).isEqualTo(YNType.Y);
+        }
+
+        @Test
+        @DisplayName("성공 - 이미 이 부서가 주 부서면 그대로 성공한다")
+        void alreadyMainIsNoop() {
+            Company company = company();
+            Department a = dept("A", 1L, company);
+            Department b = dept("B", 2L, company);
+            User user = createTestUser("user1");
+            UserDepartment inA = UserDepartment.createUserDepartment(user, a, YNType.Y);
+            UserDepartment inB = UserDepartment.createUserDepartment(user, b, YNType.N);
+            given(departmentRepository.findById(1L)).willReturn(Optional.of(a));
+            given(departmentRepository.findUserDepartment("user1", 1L)).willReturn(Optional.of(inA));
+
+            departmentService.changeMainDepartment(1L, "user1");
+
+            assertThat(inA.getMainYN()).isEqualTo(YNType.Y);
+            assertThat(inB.getMainYN()).isEqualTo(YNType.N);
+        }
+
+        @Test
+        @DisplayName("성공 - 지운 소속은 건드리지 않는다")
+        void leavesDeletedMembershipAlone() {
+            Company company = company();
+            Department a = dept("A", 1L, company);
+            Department b = dept("B", 2L, company);
+            User user = createTestUser("user1");
+            UserDepartment oldA = UserDepartment.createUserDepartment(user, a, YNType.Y);
+            oldA.deleteUserDepartment(); // main 도 N 이 되고 isDeleted = Y
+            UserDepartment inB = UserDepartment.createUserDepartment(user, b, YNType.N);
+            given(departmentRepository.findById(2L)).willReturn(Optional.of(b));
+            given(departmentRepository.findUserDepartment("user1", 2L)).willReturn(Optional.of(inB));
+
+            departmentService.changeMainDepartment(2L, "user1");
+
+            assertThat(oldA.getIsDeleted()).isEqualTo(YNType.Y);
+            assertThat(oldA.getMainYN()).isEqualTo(YNType.N);
+            assertThat(inB.getMainYN()).isEqualTo(YNType.Y);
+        }
+
+        @Test
+        @DisplayName("실패 - 이 부서 구성원이 아니면 DEPARTMENT_NOT_FOUND 이고 다른 소속은 그대로다")
+        void notMemberFails() {
+            Company company = company();
+            Department a = dept("A", 1L, company);
+            Department b = dept("B", 2L, company);
+            User user = createTestUser("user1");
+            UserDepartment inA = UserDepartment.createUserDepartment(user, a, YNType.Y);
+            given(departmentRepository.findById(2L)).willReturn(Optional.of(b));
+            given(departmentRepository.findUserDepartment("user1", 2L)).willReturn(Optional.empty());
+
+            assertThatThrownBy(() -> departmentService.changeMainDepartment(2L, "user1"))
+                    .isInstanceOf(EntityNotFoundException.class)
+                    .extracting("errorCode").isEqualTo(io.groo.ieum.common.exception.HrErrorCode.DEPARTMENT_NOT_FOUND);
+            assertThat(inA.getMainYN()).isEqualTo(YNType.Y);
+        }
+
+        @Test
+        @DisplayName("실패 - 없는 부서면 DEPARTMENT_NOT_FOUND")
+        void departmentNotFoundFails() {
+            given(departmentRepository.findById(9L)).willReturn(Optional.empty());
+
+            assertThatThrownBy(() -> departmentService.changeMainDepartment(9L, "user1"))
+                    .isInstanceOf(EntityNotFoundException.class);
+        }
+
+        @Test
+        @DisplayName("지금 규칙 그대로 - 주 부서가 이미 있는 사람을 주 부서로 새로 넣으면 거절한다")
+        void registMainStillRejectedWhenMainExists() {
+            Company company = company();
+            Department b = dept("B", 2L, company);
+            User user = createTestUser("user1");
+            given(departmentRepository.findById(2L)).willReturn(Optional.of(b));
+            given(userService.checkUserExist("user1")).willReturn(user);
+            given(departmentRepository.findMainDepartmentByUserId(user.getId()))
+                    .willReturn(Optional.of(UserDepartment.createUserDepartment(user, dept("A", 1L, company), YNType.Y)));
+
+            assertThatThrownBy(() -> departmentService.registUserDepartments(
+                    List.of(UserDepartmentServiceDto.builder().userId("user1").mainYN(YNType.Y).build()), 2L))
+                    .isInstanceOf(BusinessRuleViolationException.class);
+        }
+    }
+
+    @Nested
     @DisplayName("부서 내 사용자 조회")
     class GetUsersInAndNotInDepartment {
         @Test

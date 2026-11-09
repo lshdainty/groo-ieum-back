@@ -205,6 +205,32 @@ public interface DepartmentApi {
     );
 
     @Operation(
+            summary = "사용자 주 부서 옮기기",
+            description = "사용자의 주 부서를 이 부서로 옮깁니다. 이 부서의 구성원이어야 하며, 사용자의 다른 소속은 모두 주 부서가 아니게 됩니다. 이미 주 부서면 그대로 성공합니다."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "주 부서 옮기기 성공"
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "403",
+                    description = "권한 없음 (COMPANY:MANAGE 필요)"
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404",
+                    description = "부서를 찾을 수 없거나 사용자가 이 부서의 구성원이 아님"
+            )
+    })
+    @PutMapping("/api/v1/departments/{departmentId}/users/{userId}/main")
+    ApiResponse changeMainDepartment(
+            @Parameter(description = "주 부서로 정할 부서 ID", example = "1", required = true)
+            @PathVariable("departmentId") Long departmentId,
+            @Parameter(description = "사용자 ID", example = "user1", required = true)
+            @PathVariable("userId") String userId
+    );
+
+    @Operation(
             summary = "부서 소속 사용자 조회",
             description = "부서에 소속된 사용자와 소속되지 않은 사용자 목록을 조회합니다."
     )

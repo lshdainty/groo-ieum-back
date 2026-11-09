@@ -117,6 +117,7 @@ public class DepartmentServiceImpl implements DepartmentService {
                 data.getDesc(),
                 data.getColor()
         );
+
         log.info("부서 수정 완료: id={}", data.getId());
     }
 
@@ -221,6 +222,28 @@ public class DepartmentServiceImpl implements DepartmentService {
             userDepartment.deleteUserDepartment();
         }
         log.info("부서 사용자 삭제 완료: departmentId={}, count={}", departmentId, userIds.size());
+    }
+
+    @Override
+    @Transactional
+    public void changeMainDepartment(Long departmentId, String userId) {
+        log.debug("주 부서 옮기기 시작: departmentId={}, userId={}", departmentId, userId);
+        checkDepartmentExists(departmentId);
+
+        UserDepartment target = departmentRepository.findUserDepartment(userId, departmentId)
+                .orElseThrow(() -> {
+                    log.warn("주 부서 옮기기 실패 - 이 부서의 구성원이 아님: userId={}, departmentId={}", userId, departmentId);
+                    return new EntityNotFoundException(HrErrorCode.DEPARTMENT_NOT_FOUND);
+                });
+
+        // 한 사람에게 주 부서는 하나 - 지우지 않은 다른 소속을 모두 주 부서가 아니게 한다 (지운 소속은 건드리지 않는다)
+        for (UserDepartment other : target.getUser().getUserDepartments()) {
+            if (other != target && YNType.isN(other.getIsDeleted()) && YNType.isY(other.getMainYN())) {
+                other.changeMain(YNType.N);
+            }
+        }
+        target.changeMain(YNType.Y);
+        log.info("주 부서 옮기기 완료: departmentId={}, userId={}", departmentId, userId);
     }
 
     @Override
