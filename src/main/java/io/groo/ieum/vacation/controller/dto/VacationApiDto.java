@@ -12,7 +12,6 @@ import io.groo.ieum.vacation.type.VacationTimeType;
 import io.groo.ieum.vacation.type.VacationType;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import tools.jackson.databind.PropertyNamingStrategies;
@@ -370,12 +369,10 @@ public class VacationApiDto {
     public static class UpdateVacationPolicyReq {
         @Schema(description = "휴가 정책 이름 (앞뒤 공백 제거, 1 ~ 50자)", example = "연차", requiredMode = Schema.RequiredMode.REQUIRED)
         @NotBlank
-        @Size(max = 50)
-        private String vacationPolicyName;
+        private String vacationPolicyName; // 길이(50)는 자른 뒤에 서비스가 검증한다 - @Size 는 자르기 전 원문에 걸려 공백 붙은 50자를 막는다
 
         @Schema(description = "휴가 정책 설명 (0 ~ 1000자, 빈 글이면 지운다)", example = "연간 부여되는 기본 연차")
-        @Size(max = 1000)
-        private String vacationPolicyDesc;
+        private String vacationPolicyDesc; // 길이(1000)도 자른 뒤 서비스가 검증한다
     }
 
     @Getter
