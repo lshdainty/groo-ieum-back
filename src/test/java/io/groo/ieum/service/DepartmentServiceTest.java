@@ -298,6 +298,127 @@ class DepartmentServiceTest {
     }
 
     @Nested
+    @DisplayName("부서 이동 시 단계(level) 다시 세기")
+    class RecalculateLevel {
+        private Company company;
+        private Department root;   // level 0
+        private Department ga;     // root 아래, level 1
+        private Department na;     // ga 아래, level 2
+        private Department da;     // na 아래, level 3
+        private Department ma;     // da 아래, level 4
+        private Department other;  // root 아래, level 1 (다른 가지)
+        private Department otherChild; // other 아래, level 2
+
+        @org.junit.jupiter.api.BeforeEach
+        void tree() {
+            company = Company.createCompany("COMPANY001", "회사", "설명");
+            setCompanyId(company, 1L);
+            root = node("root", 1L, null, 0L);
+            ga = node("ga", 2L, root, 1L);
+            na = node("na", 3L, ga, 2L);
+            da = node("da", 4L, na, 3L);
+            ma = node("ma", 5L, da, 4L);
+            other = node("other", 6L, root, 1L);
+            otherChild = node("otherChild", 7L, other, 2L);
+            for (Department d : List.of(root, ga, na, da, ma, other, otherChild)) {
+                lenient().when(departmentRepository.findById(d.getRowId())).thenReturn(Optional.of(d));
+            }
+        }
+
+        private Department node(String name, Long id, Department parent, Long level) {
+            Department d = Department.createDepartment(name, name, parent, null, level, "설명", "#FF0000", company);
+            setDepartmentId(d, id);
+            return d;
+        }
+
+        private DepartmentServiceDto moveTo(Long id, Long parentId, Long requestLevel) {
+            return DepartmentServiceDto.builder().id(id).parentId(parentId).level(requestLevel).build();
+        }
+
+        @Test
+        @DisplayName("성공 - 나(2)를 다른 가지의 other(1) 아래로 옮기면 나 = 2, 아래 부서들은 한 단계씩 따라간다")
+        void movedSubtreeFollowsNewParent() {
+            // 자손 단계가 이미 어긋나 있었어도(9) 옮기면서 바로잡힌다
+            da.changeLevel(9L);
+            ma.changeLevel(9L);
+            departmentService.edit(moveTo(3L, 6L, 99L));
+            assertThat(na.getLevel()).isEqualTo(2L);
+            assertThat(da.getLevel()).isEqualTo(3L);
+            assertThat(ma.getLevel()).isEqualTo(4L);
+        }
+
+        @Test
+        @DisplayName("성공 - 나를 더 깊은 otherChild(2) 아래로 옮기면 나 = 3, 다 = 4, 마 = 5 (자손 연쇄)")
+        void deeperParentShiftsDescendants() {
+            departmentService.edit(moveTo(3L, 7L, 1L));
+            assertThat(na.getLevel()).isEqualTo(3L);
+            assertThat(da.getLevel()).isEqualTo(4L);
+            assertThat(ma.getLevel()).isEqualTo(5L);
+            // 다른 가지는 그대로
+            assertThat(ga.getLevel()).isEqualTo(1L);
+            assertThat(other.getLevel()).isEqualTo(1L);
+            assertThat(otherChild.getLevel()).isEqualTo(2L);
+            assertThat(otherChild.getChildren()).contains(na);
+            assertThat(ga.getChildren()).doesNotContain(na);
+        }
+
+        @Test
+        @DisplayName("성공 - 나를 최상위 root(0) 바로 아래로 올리면 나 = 1, 다 = 2, 마 = 3 (요청의 level 값은 무시)")
+        void movingUpShrinksDescendants() {
+            departmentService.edit(moveTo(3L, 1L, 77L));
+            assertThat(na.getLevel()).isEqualTo(1L);
+            assertThat(da.getLevel()).isEqualTo(2L);
+            assertThat(ma.getLevel()).isEqualTo(3L);
+        }
+
+        @Test
+        @DisplayName("성공 - 지운 자손은 다시 세지 않고, 그 아래 살아 있는 부서도 지나가지 않는다")
+        void deletedDescendantIsSkipped() {
+            da.deleteDepartment();
+            departmentService.edit(moveTo(3L, 7L, null));
+            assertThat(na.getLevel()).isEqualTo(3L);
+            assertThat(da.getLevel()).isEqualTo(3L); // 지운 부서는 옛 값 그대로
+            assertThat(ma.getLevel()).isEqualTo(4L);
+        }
+
+        @Test
+        @DisplayName("성공 - 상위가 그대로면 요청 level 을 그대로 쓰고 자손은 건드리지 않는다 (옛 화면과 같다)")
+        void sameParentKeepsRequestedLevel() {
+            departmentService.edit(moveTo(3L, 2L, 5L));
+            assertThat(na.getLevel()).isEqualTo(5L);
+            assertThat(da.getLevel()).isEqualTo(3L);
+            assertThat(ma.getLevel()).isEqualTo(4L);
+        }
+
+        @Test
+        @DisplayName("성공 - 상위를 보내지 않으면(이름만 수정) 단계는 그대로다")
+        void noParentKeepsLevels() {
+            departmentService.edit(DepartmentServiceDto.builder().id(3L).name("new").build());
+            assertThat(na.getLevel()).isEqualTo(2L);
+            assertThat(da.getLevel()).isEqualTo(3L);
+        }
+
+        @Test
+        @DisplayName("거절 - 자기 자손 아래로 옮기면 순환 참조로 거절되고 단계는 바뀌지 않는다")
+        void circularRejectedLevelsUntouched() {
+            assertThatThrownBy(() -> departmentService.edit(moveTo(3L, 5L, null)))
+                    .isInstanceOf(InvalidValueException.class)
+                    .extracting("errorCode").isEqualTo(io.groo.ieum.common.exception.HrErrorCode.DEPARTMENT_CIRCULAR_REFERENCE);
+            assertThat(na.getLevel()).isEqualTo(2L);
+            assertThat(da.getLevel()).isEqualTo(3L);
+            assertThat(ma.getLevel()).isEqualTo(4L);
+        }
+
+        @Test
+        @DisplayName("거절 - 자기 자신 아래로는 거절된다")
+        void selfRejected() {
+            assertThatThrownBy(() -> departmentService.edit(moveTo(3L, 3L, null)))
+                    .isInstanceOf(InvalidValueException.class)
+                    .extracting("errorCode").isEqualTo(io.groo.ieum.common.exception.HrErrorCode.DEPARTMENT_SELF_REFERENCE);
+        }
+    }
+
+    @Nested
     @DisplayName("부서 삭제")
     class Delete {
         @Test
@@ -533,6 +654,147 @@ class DepartmentServiceTest {
             // when & then
             assertThatThrownBy(() -> departmentService.deleteUserDepartments(List.of("user1"), 1L))
                     .isInstanceOf(EntityNotFoundException.class);
+        }
+    }
+
+    @Nested
+    @DisplayName("주 부서 옮기기")
+    class ChangeMainDepartment {
+        private Company company() {
+            Company company = Company.createCompany("COMPANY001", "회사", "설명");
+            setCompanyId(company, 1L);
+            return company;
+        }
+
+        /** 잠금 조회가 돌려주는 것 = 그 사람의 지우지 않은 소속 전부 */
+        private List<UserDepartment> activeOf(User user) {
+            return user.getUserDepartments().stream().filter(ud -> ud.getIsDeleted() == YNType.N).toList();
+        }
+
+        private Department dept(String name, Long id, Company company) {
+            Department d = Department.createDepartment(name, name, null, null, 1L, "설명", "#FF0000", company);
+            setDepartmentId(d, id);
+            return d;
+        }
+
+        @Test
+        @DisplayName("성공 - 다른 부서가 주 부서인 사람을 이 부서로 옮긴다 (앞 N · 이 Y · 한 사람에 Y 하나)")
+        void movesMainFromOtherDepartment() {
+            Company company = company();
+            Department a = dept("A", 1L, company);
+            Department b = dept("B", 2L, company);
+            Department c = dept("C", 3L, company);
+            User user = createTestUser("user1");
+            UserDepartment inA = UserDepartment.createUserDepartment(user, a, YNType.Y);
+            UserDepartment inB = UserDepartment.createUserDepartment(user, b, YNType.N);
+            UserDepartment inC = UserDepartment.createUserDepartment(user, c, YNType.N);
+            given(departmentRepository.findById(2L)).willReturn(Optional.of(b));
+            given(departmentRepository.findUserDepartmentsForUpdate("user1")).willReturn(activeOf(user));
+
+            departmentService.changeMainDepartment(2L, "user1");
+
+            // 동시 요청이 겹쳐도 Y 가 하나만 남도록 소속 행을 잠그고 읽는 경로만 탄다 (잠금 없는 조회는 쓰지 않는다)
+            then(departmentRepository).should().findUserDepartmentsForUpdate("user1");
+            then(departmentRepository).should(never()).findUserDepartment(any(), any());
+            assertThat(inA.getMainYN()).isEqualTo(YNType.N);
+            assertThat(inB.getMainYN()).isEqualTo(YNType.Y);
+            assertThat(inC.getMainYN()).isEqualTo(YNType.N);
+            assertThat(user.getUserDepartments().stream().filter(ud -> ud.getMainYN() == YNType.Y)).hasSize(1);
+        }
+
+        @Test
+        @DisplayName("성공 - 주 부서가 없던 사람은 이 부서가 주 부서가 된다")
+        void setsMainWhenNone() {
+            Company company = company();
+            Department b = dept("B", 2L, company);
+            User user = createTestUser("user1");
+            UserDepartment inB = UserDepartment.createUserDepartment(user, b, YNType.N);
+            given(departmentRepository.findById(2L)).willReturn(Optional.of(b));
+            given(departmentRepository.findUserDepartmentsForUpdate("user1")).willReturn(activeOf(user));
+
+            departmentService.changeMainDepartment(2L, "user1");
+
+            assertThat(inB.getMainYN()).isEqualTo(YNType.Y);
+        }
+
+        @Test
+        @DisplayName("성공 - 이미 이 부서가 주 부서면 그대로 성공한다")
+        void alreadyMainIsNoop() {
+            Company company = company();
+            Department a = dept("A", 1L, company);
+            Department b = dept("B", 2L, company);
+            User user = createTestUser("user1");
+            UserDepartment inA = UserDepartment.createUserDepartment(user, a, YNType.Y);
+            UserDepartment inB = UserDepartment.createUserDepartment(user, b, YNType.N);
+            given(departmentRepository.findById(1L)).willReturn(Optional.of(a));
+            given(departmentRepository.findUserDepartmentsForUpdate("user1")).willReturn(activeOf(user));
+
+            departmentService.changeMainDepartment(1L, "user1");
+
+            assertThat(inA.getMainYN()).isEqualTo(YNType.Y);
+            assertThat(inB.getMainYN()).isEqualTo(YNType.N);
+        }
+
+        @Test
+        @DisplayName("성공 - 지운 소속은 건드리지 않는다")
+        void leavesDeletedMembershipAlone() {
+            Company company = company();
+            Department a = dept("A", 1L, company);
+            Department b = dept("B", 2L, company);
+            User user = createTestUser("user1");
+            UserDepartment oldA = UserDepartment.createUserDepartment(user, a, YNType.Y);
+            oldA.deleteUserDepartment(); // main 도 N 이 되고 isDeleted = Y
+            UserDepartment inB = UserDepartment.createUserDepartment(user, b, YNType.N);
+            given(departmentRepository.findById(2L)).willReturn(Optional.of(b));
+            given(departmentRepository.findUserDepartmentsForUpdate("user1")).willReturn(activeOf(user));
+
+            departmentService.changeMainDepartment(2L, "user1");
+
+            assertThat(oldA.getIsDeleted()).isEqualTo(YNType.Y);
+            assertThat(oldA.getMainYN()).isEqualTo(YNType.N);
+            assertThat(inB.getMainYN()).isEqualTo(YNType.Y);
+        }
+
+        @Test
+        @DisplayName("실패 - 이 부서 구성원이 아니면 DEPARTMENT_NOT_FOUND 이고 다른 소속은 그대로다")
+        void notMemberFails() {
+            Company company = company();
+            Department a = dept("A", 1L, company);
+            Department b = dept("B", 2L, company);
+            User user = createTestUser("user1");
+            UserDepartment inA = UserDepartment.createUserDepartment(user, a, YNType.Y);
+            given(departmentRepository.findById(2L)).willReturn(Optional.of(b));
+            given(departmentRepository.findUserDepartmentsForUpdate("user1")).willReturn(activeOf(user));
+
+            assertThatThrownBy(() -> departmentService.changeMainDepartment(2L, "user1"))
+                    .isInstanceOf(EntityNotFoundException.class)
+                    .extracting("errorCode").isEqualTo(io.groo.ieum.common.exception.HrErrorCode.DEPARTMENT_NOT_FOUND);
+            assertThat(inA.getMainYN()).isEqualTo(YNType.Y);
+        }
+
+        @Test
+        @DisplayName("실패 - 없는 부서면 DEPARTMENT_NOT_FOUND")
+        void departmentNotFoundFails() {
+            given(departmentRepository.findById(9L)).willReturn(Optional.empty());
+
+            assertThatThrownBy(() -> departmentService.changeMainDepartment(9L, "user1"))
+                    .isInstanceOf(EntityNotFoundException.class);
+        }
+
+        @Test
+        @DisplayName("지금 규칙 그대로 - 주 부서가 이미 있는 사람을 주 부서로 새로 넣으면 거절한다")
+        void registMainStillRejectedWhenMainExists() {
+            Company company = company();
+            Department b = dept("B", 2L, company);
+            User user = createTestUser("user1");
+            given(departmentRepository.findById(2L)).willReturn(Optional.of(b));
+            given(userService.checkUserExist("user1")).willReturn(user);
+            given(departmentRepository.findMainDepartmentByUserId(user.getId()))
+                    .willReturn(Optional.of(UserDepartment.createUserDepartment(user, dept("A", 1L, company), YNType.Y)));
+
+            assertThatThrownBy(() -> departmentService.registUserDepartments(
+                    List.of(UserDepartmentServiceDto.builder().userId("user1").mainYN(YNType.Y).build()), 2L))
+                    .isInstanceOf(BusinessRuleViolationException.class);
         }
     }
 

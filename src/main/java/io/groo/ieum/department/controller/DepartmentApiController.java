@@ -109,6 +109,13 @@ public class DepartmentApiController implements DepartmentApi {
     }
 
     @Override
+    @PreAuthorize("hasAuthority('COMPANY:MANAGE')")
+    public ApiResponse changeMainDepartment(Long departmentId, String userId) {
+        departmentService.changeMainDepartment(departmentId, userId);
+        return ApiResponse.success();
+    }
+
+    @Override
     @PreAuthorize("hasAuthority('COMPANY:READ')")
     public ApiResponse getDepartmentUsers(Long departmentId) {
         DepartmentServiceDto serviceDto = departmentService.getUsersInAndNotInDepartment(departmentId);

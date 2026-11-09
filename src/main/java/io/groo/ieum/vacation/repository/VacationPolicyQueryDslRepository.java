@@ -57,6 +57,18 @@ public class VacationPolicyQueryDslRepository implements VacationPolicyRepositor
     }
 
     @Override
+    public boolean existsByNameAndRowIdNot(String name, Long rowId) {
+        Integer count = query
+                .selectOne()
+                .from(vacationPolicy)
+                .where(vacationPolicy.name.eq(name)
+                        .and(vacationPolicy.rowId.ne(rowId))
+                        .and(vacationPolicy.isDeleted.eq(YNType.N)))
+                .fetchFirst();
+        return count != null;
+    }
+
+    @Override
     public List<VacationPolicy> findByVacationType(VacationType vacationType) {
         return query
                 .selectFrom(vacationPolicy)

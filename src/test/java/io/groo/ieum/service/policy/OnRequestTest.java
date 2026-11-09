@@ -1,6 +1,8 @@
 package io.groo.ieum.service.policy;
 
+import io.groo.core.exception.DuplicateException;
 import io.groo.core.exception.InvalidValueException;
+import io.groo.ieum.common.exception.HrErrorCode;
 import io.groo.core.type.YNType;
 import io.groo.ieum.vacation.domain.VacationPolicy;
 import io.groo.ieum.vacation.repository.VacationPolicyRepository;
@@ -95,7 +97,8 @@ class OnRequestTest {
 
             // when & then
             assertThatThrownBy(() -> onRequest.registVacationPolicy(dto))
-                    .isInstanceOf(InvalidValueException.class);
+                    .isInstanceOf(DuplicateException.class)
+                    .extracting("errorCode").isEqualTo(HrErrorCode.VACATION_POLICY_NAME_DUPLICATE);
         }
 
         @Test

@@ -108,6 +108,11 @@ public class DepartmentServiceImpl implements DepartmentService {
             headUser = userService.checkUserExist(data.getHeadUserId());
         }
 
+        // 상위 부서가 실제로 바뀌는지 (같은 상위를 다시 보내는 것은 바뀐 것이 아니다)
+        boolean parentChanged = newParent != null
+                && (department.getParent() == null
+                || !department.getParent().getRowId().equals(newParent.getRowId()));
+
         department.updateDepartment(
                 data.getName(),
                 data.getNameKR(),
@@ -117,6 +122,13 @@ public class DepartmentServiceImpl implements DepartmentService {
                 data.getDesc(),
                 data.getColor()
         );
+
+        // 상위가 바뀌면 단계(level)를 서버가 다시 센다 - 이 부서 = 새 상위 + 1, 지우지 않은 자손은 부모 + 1
+        // (결재 순서 정렬이 부서 level 을 쓰므로 자손 단계가 옛 값으로 남으면 순서가 조용히 어긋난다)
+        if (parentChanged) {
+            department.changeLevel(levelOf(newParent) + 1);
+            recalculateDescendantLevels(department);
+        }
         log.info("부서 수정 완료: id={}", data.getId());
     }
 
@@ -224,6 +236,32 @@ public class DepartmentServiceImpl implements DepartmentService {
     }
 
     @Override
+    @Transactional
+    public void changeMainDepartment(Long departmentId, String userId) {
+        log.debug("주 부서 옮기기 시작: departmentId={}, userId={}", departmentId, userId);
+        checkDepartmentExists(departmentId);
+
+        // 그 사람의 소속 행을 잠그고 읽는다 - 같은 사람에 대한 주 부서 쓰기가 겹쳐도 차례로 돌아 Y 가 하나만 남는다
+        List<UserDepartment> memberships = departmentRepository.findUserDepartmentsForUpdate(userId);
+        UserDepartment target = memberships.stream()
+                .filter(ud -> ud.getDepartment().getRowId().equals(departmentId))
+                .findFirst()
+                .orElseThrow(() -> {
+                    log.warn("주 부서 옮기기 실패 - 이 부서의 구성원이 아님: userId={}, departmentId={}", userId, departmentId);
+                    return new EntityNotFoundException(HrErrorCode.DEPARTMENT_NOT_FOUND);
+                });
+
+        // 한 사람에게 주 부서는 하나 - 지우지 않은 다른 소속을 모두 주 부서가 아니게 한다 (지운 소속은 건드리지 않는다)
+        for (UserDepartment other : memberships) {
+            if (other != target && YNType.isY(other.getMainYN())) {
+                other.changeMain(YNType.N);
+            }
+        }
+        target.changeMain(YNType.Y);
+        log.info("주 부서 옮기기 완료: departmentId={}, userId={}", departmentId, userId);
+    }
+
+    @Override
     public DepartmentServiceDto getUsersInAndNotInDepartment(Long departmentId) {
         log.debug("부서별 사용자 조회: departmentId={}", departmentId);
         // 부서 존재 여부 확인 및 부서 정보 조회
@@ -276,6 +314,22 @@ public class DepartmentServiceImpl implements DepartmentService {
             throw new EntityNotFoundException(HrErrorCode.DEPARTMENT_NOT_FOUND);
         }
         return department.get();
+    }
+
+    private long levelOf(Department department) {
+        return department.getLevel() == null ? 0L : department.getLevel();
+    }
+
+    /**
+     * 자손 단계 다시 세기: 지우지 않은 자식은 부모 level + 1, 나무 깊이만큼 내려간다.
+     */
+    private void recalculateDescendantLevels(Department parent) {
+        for (Department child : parent.getChildren()) {
+            if (YNType.isN(child.getIsDeleted())) {
+                child.changeLevel(levelOf(parent) + 1);
+                recalculateDescendantLevels(child);
+            }
+        }
     }
 
     /**

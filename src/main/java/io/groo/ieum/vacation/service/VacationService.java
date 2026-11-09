@@ -162,6 +162,18 @@ public interface VacationService {
     Long deleteVacationPolicy(Long vacationPolicyId);
 
     /**
+     * 휴가 정책 이름 · 설명 수정
+     *
+     * 부여 규칙은 바꾸지 않는다. 이미 받은 휴가와 스케줄은 그대로다.
+     *
+     * @param vacationPolicyId 휴가 정책 ID
+     * @param name 새 이름 (앞뒤 공백 제거, 1 ~ 50자)
+     * @param desc 새 설명 (0 ~ 1000자, 빈 글이면 null)
+     * @return 수정된 휴가 정책 ID
+     */
+    Long updateVacationPolicy(Long vacationPolicyId, String name, String desc);
+
+    /**
      * 유저에게 할당된 휴가 정책 조회 (Plan 기반)
      *
      * @param userId 유저 ID

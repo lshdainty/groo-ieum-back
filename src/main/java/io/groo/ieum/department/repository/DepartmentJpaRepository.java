@@ -60,6 +60,16 @@ public class DepartmentJpaRepository implements DepartmentRepository {
     }
 
     @Override
+    public List<UserDepartment> findUserDepartmentsForUpdate(String userId) {
+        return em.createQuery(
+                "select ud from UserDepartment ud where ud.user.id = :userId and ud.isDeleted = :isDeleted", UserDepartment.class)
+                .setParameter("userId", userId)
+                .setParameter("isDeleted", YNType.N)
+                .setLockMode(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+                .getResultList();
+    }
+
+    @Override
     public List<User> findUsersNotInDepartment(Long departmentId) {
         return em.createQuery(
                 "select u from User u where u.isDeleted = :isDeleted and u.company != :systemCompany and not exists (" +

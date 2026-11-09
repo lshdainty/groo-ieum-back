@@ -170,6 +170,32 @@ class VacationPolicyJpaRepositoryTest {
     }
 
     @Test
+    @DisplayName("자기 제외 정책명 중복 확인 - 자기 자신 · 지운 정책은 세지 않고 다른 정책만 센다")
+    void existsByNameAndRowIdNot() {
+        // given
+        VacationPolicy self = VacationPolicy.createManualGrantPolicy(
+                "연차", "연차", VacationType.ANNUAL, new BigDecimal("8.0"),
+                YNType.N, YNType.N, EffectiveType.IMMEDIATELY, ExpirationType.END_OF_YEAR);
+        VacationPolicy other = VacationPolicy.createManualGrantPolicy(
+                "월차", "월차", VacationType.ANNUAL, new BigDecimal("1.0"),
+                YNType.N, YNType.N, EffectiveType.IMMEDIATELY, ExpirationType.END_OF_YEAR);
+        VacationPolicy deleted = VacationPolicy.createManualGrantPolicy(
+                "지운정책", "지움", VacationType.ANNUAL, new BigDecimal("1.0"),
+                YNType.N, YNType.N, EffectiveType.IMMEDIATELY, ExpirationType.END_OF_YEAR);
+        vacationPolicyRepository.save(self);
+        vacationPolicyRepository.save(other);
+        vacationPolicyRepository.save(deleted);
+        deleted.deleteVacationPolicy();
+        em.flush();
+        em.clear();
+
+        // when & then
+        assertThat(vacationPolicyRepository.existsByNameAndRowIdNot("연차", self.getRowId())).isFalse();
+        assertThat(vacationPolicyRepository.existsByNameAndRowIdNot("월차", self.getRowId())).isTrue();
+        assertThat(vacationPolicyRepository.existsByNameAndRowIdNot("지운정책", self.getRowId())).isFalse();
+    }
+
+    @Test
     @DisplayName("ON_REQUEST 타입 정책 생성 및 조회")
     void createOnRequestPolicy() {
         // given

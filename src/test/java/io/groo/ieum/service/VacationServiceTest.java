@@ -2,8 +2,10 @@ package io.groo.ieum.service;
 
 import io.groo.ieum.common.time.CompanyClock;
 import io.groo.core.exception.BusinessRuleViolationException;
+import io.groo.core.exception.DuplicateException;
 import io.groo.core.exception.EntityNotFoundException;
 import io.groo.core.exception.ForbiddenException;
+import io.groo.ieum.common.exception.HrErrorCode;
 import io.groo.core.exception.InvalidValueException;
 import io.groo.core.type.CountryCode;
 import io.groo.core.type.YNType;
@@ -379,6 +381,212 @@ class VacationServiceTest {
 
             // then
             assertThat(result).isEmpty();
+        }
+    }
+
+    @Nested
+    @DisplayName("휴가 정책 응답의 삭제 가능 여부(can_deleted)")
+    class VacationPolicyCanDeleted {
+        @Test
+        @DisplayName("성공 - 목록 · 단건 모두 정책의 canDeleted 값을 그대로 싣는다 (직접 부여 기본 정책 N · 그 밖 Y)")
+        void carriesCanDeleted() {
+            VacationPolicy basic = createTestPolicy();
+            basic.updateCantDeleted();
+            ReflectionTestUtils.setField(basic, "rowId", 1L);
+            VacationPolicy custom = createTestPolicy();
+            custom.updateCanDeleted();
+            ReflectionTestUtils.setField(custom, "rowId", 2L);
+            given(vacationPolicyRepository.findVacationPolicies()).willReturn(List.of(basic, custom));
+            given(vacationPolicyRepository.findByRowId(1L)).willReturn(Optional.of(basic));
+            given(vacationPolicyRepository.findByRowId(2L)).willReturn(Optional.of(custom));
+
+            List<VacationPolicyServiceDto> list = vacationService.getVacationPolicies();
+
+            assertThat(list).extracting(VacationPolicyServiceDto::getCanDeleted).containsExactly(YNType.N, YNType.Y);
+            assertThat(vacationService.getVacationPolicy(1L).getCanDeleted()).isEqualTo(YNType.N);
+            assertThat(vacationService.getVacationPolicy(2L).getCanDeleted()).isEqualTo(YNType.Y);
+        }
+    }
+
+    @Nested
+    @DisplayName("휴가 정책 수정")
+    class UpdateVacationPolicy {
+        private VacationPolicy policyOf(Long id, String name) {
+            VacationPolicy policy = createTestPolicy();
+            ReflectionTestUtils.setField(policy, "rowId", id);
+            policy.updateNameAndDesc(name, "연차 휴가");
+            return policy;
+        }
+
+        @Test
+        @DisplayName("성공 - 이름 · 설명만 바뀌고 부여 규칙과 삭제 가능 여부는 그대로다")
+        void updateKeepsGrantRules() {
+            VacationPolicy policy = policyOf(1L, "연차");
+            policy.updateCanDeleted();
+            given(vacationPolicyRepository.findByRowId(1L)).willReturn(Optional.of(policy));
+            given(vacationPolicyRepository.existsByNameAndRowIdNot("새 연차", 1L)).willReturn(false);
+            var beforeMethod = policy.getGrantMethod();
+            var beforeTime = policy.getGrantTime();
+            var beforeType = policy.getVacationType();
+            var beforeEffective = policy.getEffectiveType();
+            var beforeExpiration = policy.getExpirationType();
+            var beforeRepeatUnit = policy.getRepeatUnit();
+            var beforeFlexible = policy.getIsFlexibleGrant();
+            var beforeCanDeleted = policy.getCanDeleted();
+
+            Long result = vacationService.updateVacationPolicy(1L, "  새 연차  ", "새 설명");
+
+            assertThat(result).isEqualTo(1L);
+            assertThat(policy.getName()).isEqualTo("새 연차");
+            assertThat(policy.getDesc()).isEqualTo("새 설명");
+            assertThat(policy.getGrantMethod()).isEqualTo(beforeMethod);
+            assertThat(policy.getGrantTime()).isEqualByComparingTo(beforeTime);
+            assertThat(policy.getVacationType()).isEqualTo(beforeType);
+            assertThat(policy.getEffectiveType()).isEqualTo(beforeEffective);
+            assertThat(policy.getExpirationType()).isEqualTo(beforeExpiration);
+            assertThat(policy.getRepeatUnit()).isEqualTo(beforeRepeatUnit);
+            assertThat(policy.getIsFlexibleGrant()).isEqualTo(beforeFlexible);
+            assertThat(policy.getCanDeleted()).isEqualTo(beforeCanDeleted);
+        }
+
+        @Test
+        @DisplayName("성공 - 자기 이름 그대로 저장해도 통과한다 (자기 자신은 중복 검사에서 제외)")
+        void updateSameNameOfSelf() {
+            VacationPolicy policy = policyOf(1L, "연차");
+            given(vacationPolicyRepository.findByRowId(1L)).willReturn(Optional.of(policy));
+            given(vacationPolicyRepository.existsByNameAndRowIdNot("연차", 1L)).willReturn(false);
+
+            vacationService.updateVacationPolicy(1L, "연차", "설명만 바뀜");
+
+            assertThat(policy.getName()).isEqualTo("연차");
+            assertThat(policy.getDesc()).isEqualTo("설명만 바뀜");
+        }
+
+        @Test
+        @DisplayName("성공 - 설명이 빈 글이면 null 로 둔다")
+        void updateBlankDescBecomesNull() {
+            VacationPolicy policy = policyOf(1L, "연차");
+            given(vacationPolicyRepository.findByRowId(1L)).willReturn(Optional.of(policy));
+            given(vacationPolicyRepository.existsByNameAndRowIdNot("연차", 1L)).willReturn(false);
+
+            vacationService.updateVacationPolicy(1L, "연차", "   ");
+
+            assertThat(policy.getDesc()).isNull();
+        }
+
+        @Test
+        @DisplayName("성공 - 이미 받은 휴가(VacationGrant)는 정책을 고쳐도 그대로다")
+        void updateDoesNotTouchGrants() {
+            VacationPolicy policy = policyOf(1L, "연차");
+            User user = User.createUser(
+                    null, "u1", "테스트유저", "t@test.com", LocalDate.of(1990, 1, 1), "NONE", "9 ~ 18",
+                    LocalDate.now(), YNType.N, null, null, CountryCode.KR);
+            VacationGrant grant = VacationGrant.createVacationGrant(
+                    user, policy, "부여", VacationType.ANNUAL, new BigDecimal("15.0000"),
+                    java.time.LocalDateTime.of(2030, 1, 1, 0, 0), java.time.LocalDateTime.of(2030, 12, 31, 23, 59));
+            BigDecimal grantTime = grant.getGrantTime();
+            GrantStatus status = grant.getStatus();
+            BigDecimal remain = grant.getRemainTime();
+            given(vacationPolicyRepository.findByRowId(1L)).willReturn(Optional.of(policy));
+            given(vacationPolicyRepository.existsByNameAndRowIdNot("새 연차", 1L)).willReturn(false);
+
+            vacationService.updateVacationPolicy(1L, "새 연차", "새 설명");
+
+            assertThat(grant.getGrantTime()).isEqualByComparingTo(grantTime);
+            assertThat(grant.getStatus()).isEqualTo(status);
+            assertThat(grant.getRemainTime()).isEqualByComparingTo(remain);
+            assertThat(grant.getPolicy().getName()).isEqualTo("새 연차");
+        }
+
+        @Test
+        @DisplayName("실패 - 없는 정책이면 VACATION_POLICY_NOT_FOUND")
+        void updateNotFound() {
+            given(vacationPolicyRepository.findByRowId(999L)).willReturn(Optional.empty());
+
+            assertThatThrownBy(() -> vacationService.updateVacationPolicy(999L, "연차", null))
+                    .isInstanceOf(EntityNotFoundException.class)
+                    .extracting("errorCode").isEqualTo(HrErrorCode.VACATION_POLICY_NOT_FOUND);
+        }
+
+        @Test
+        @DisplayName("실패 - 지운 정책도 같은 404 이고 이름은 바뀌지 않는다")
+        void updateDeletedPolicy() {
+            VacationPolicy policy = policyOf(1L, "연차");
+            policy.deleteVacationPolicy();
+            given(vacationPolicyRepository.findByRowId(1L)).willReturn(Optional.of(policy));
+
+            assertThatThrownBy(() -> vacationService.updateVacationPolicy(1L, "새 이름", null))
+                    .isInstanceOf(EntityNotFoundException.class)
+                    .extracting("errorCode").isEqualTo(HrErrorCode.VACATION_POLICY_NOT_FOUND);
+            assertThat(policy.getName()).isEqualTo("연차");
+        }
+
+        @Test
+        @DisplayName("실패 - 지우지 않은 다른 정책과 같은 이름이면 VACATION_POLICY_NAME_DUPLICATE")
+        void updateDuplicateName() {
+            VacationPolicy policy = policyOf(1L, "연차");
+            given(vacationPolicyRepository.findByRowId(1L)).willReturn(Optional.of(policy));
+            given(vacationPolicyRepository.existsByNameAndRowIdNot("월차", 1L)).willReturn(true);
+
+            assertThatThrownBy(() -> vacationService.updateVacationPolicy(1L, "월차", null))
+                    .isInstanceOf(DuplicateException.class)
+                    .extracting("errorCode").isEqualTo(HrErrorCode.VACATION_POLICY_NAME_DUPLICATE);
+            assertThat(policy.getName()).isEqualTo("연차");
+        }
+
+        @Test
+        @DisplayName("성공 - 지운 정책과 같은 이름은 통과한다 (중복 검사는 지우지 않은 정책만 센다)")
+        void updateSameNameAsDeletedPolicy() {
+            VacationPolicy policy = policyOf(1L, "연차");
+            given(vacationPolicyRepository.findByRowId(1L)).willReturn(Optional.of(policy));
+            // 지운 정책은 existsByNameAndRowIdNot 이 세지 않으므로 false
+            given(vacationPolicyRepository.existsByNameAndRowIdNot("삭제정책", 1L)).willReturn(false);
+
+            vacationService.updateVacationPolicy(1L, "삭제정책", null);
+
+            assertThat(policy.getName()).isEqualTo("삭제정책");
+        }
+
+        @Test
+        @DisplayName("실패 - 빈 이름 · 공백 이름 · null 이름은 INVALID_PARAMETER")
+        void updateBlankName() {
+            VacationPolicy policy = policyOf(1L, "연차");
+            given(vacationPolicyRepository.findByRowId(1L)).willReturn(Optional.of(policy));
+
+            for (String bad : new String[]{"", "   ", null}) {
+                assertThatThrownBy(() -> vacationService.updateVacationPolicy(1L, bad, null))
+                        .isInstanceOf(InvalidValueException.class);
+            }
+            assertThat(policy.getName()).isEqualTo("연차");
+        }
+
+        @Test
+        @DisplayName("경계 - 이름 50자는 통과하고 51자는 거절한다 (앞뒤 공백은 자른 뒤 센다)")
+        void updateNameLengthBoundary() {
+            VacationPolicy policy = policyOf(1L, "연차");
+            String fifty = "가".repeat(50);
+            given(vacationPolicyRepository.findByRowId(1L)).willReturn(Optional.of(policy));
+            given(vacationPolicyRepository.existsByNameAndRowIdNot(fifty, 1L)).willReturn(false);
+
+            vacationService.updateVacationPolicy(1L, " " + fifty + " ", null);
+            assertThat(policy.getName()).isEqualTo(fifty);
+
+            assertThatThrownBy(() -> vacationService.updateVacationPolicy(1L, "가".repeat(51), null))
+                    .isInstanceOf(InvalidValueException.class);
+        }
+
+        @Test
+        @DisplayName("경계 - 설명 1000자는 통과하고 1001자는 거절한다")
+        void updateDescLengthBoundary() {
+            VacationPolicy policy = policyOf(1L, "연차");
+            given(vacationPolicyRepository.findByRowId(1L)).willReturn(Optional.of(policy));
+            given(vacationPolicyRepository.existsByNameAndRowIdNot("연차", 1L)).willReturn(false);
+
+            vacationService.updateVacationPolicy(1L, "연차", "가".repeat(1000));
+            assertThat(policy.getDesc()).hasSize(1000);
+
+            assertThatThrownBy(() -> vacationService.updateVacationPolicy(1L, "연차", "가".repeat(1001)))
+                    .isInstanceOf(InvalidValueException.class);
         }
     }
 

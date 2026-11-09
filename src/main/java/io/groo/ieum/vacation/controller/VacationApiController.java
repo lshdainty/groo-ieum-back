@@ -351,7 +351,8 @@ public class VacationApiController implements VacationApi {
                 policy.getSpecificDays(),
                 policy.getEffectiveType(),
                 policy.getExpirationType(),
-                policy.getRepeatGrantDescription()
+                policy.getRepeatGrantDescription(),
+                policy.getCanDeleted()
         ));
     }
 
@@ -377,11 +378,21 @@ public class VacationApiController implements VacationApi {
                         vp.getSpecificDays(),
                         vp.getEffectiveType(),
                         vp.getExpirationType(),
-                        vp.getRepeatGrantDescription()
+                        vp.getRepeatGrantDescription(),
+                        vp.getCanDeleted()
                 ))
                 .toList();
 
         return ApiResponse.success(resp);
+    }
+
+    @Override
+    @PreAuthorize("hasAuthority('VACATION:MANAGE')")
+    public ApiResponse updateVacationPolicy(Long vacationPolicyId, VacationApiDto.UpdateVacationPolicyReq data) {
+        Long updatedPolicyId = vacationService.updateVacationPolicy(
+                vacationPolicyId, data.getVacationPolicyName(), data.getVacationPolicyDesc());
+
+        return ApiResponse.success(new VacationApiDto.UpdateVacationPolicyResp(updatedPolicyId));
     }
 
     @Override

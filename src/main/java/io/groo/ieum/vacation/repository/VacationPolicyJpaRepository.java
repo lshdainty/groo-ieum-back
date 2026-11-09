@@ -44,6 +44,17 @@ public class VacationPolicyJpaRepository implements VacationPolicyRepository {
     }
 
     @Override
+    public boolean existsByNameAndRowIdNot(String name, Long rowId) {
+        Long count = em.createQuery(
+                        "select count(vp) from VacationPolicy vp where vp.name = :name and vp.rowId <> :rowId and vp.isDeleted = :isDeleted", Long.class)
+                .setParameter("name", name)
+                .setParameter("rowId", rowId)
+                .setParameter("isDeleted", YNType.N)
+                .getSingleResult();
+        return count != null && count > 0;
+    }
+
+    @Override
     public List<VacationPolicy> findByVacationType(VacationType vacationType) {
         return em.createQuery(
                         "select vp from VacationPolicy vp where vp.vacationType = :vacationType and vp.isDeleted = :isDeleted", VacationPolicy.class)

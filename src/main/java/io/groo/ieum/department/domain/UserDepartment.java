@@ -84,6 +84,14 @@ public class UserDepartment extends AuditingFieldsWithIp {
     }
 
     /**
+     * 메인 부서 여부 변경<br>
+     * 한 사람에게 메인 부서가 하나만 남도록 서비스가 다른 소속의 값을 함께 바꾼다.
+     */
+    public void changeMain(YNType mainYN) {
+        this.mainYN = mainYN;
+    }
+
+    /**
      * 유저 부서 삭제 함수<br>
      * Entity의 경우 Setter없이 Getter만 사용<br>
      * 해당 메소드를 통해 유저 부서 삭제할 것
