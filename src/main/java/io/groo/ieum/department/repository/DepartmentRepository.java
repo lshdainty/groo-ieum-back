@@ -51,6 +51,15 @@ public interface DepartmentRepository {
     Optional<UserDepartment> findUserDepartment(String userId, Long departmentId);
 
     /**
+     * 특정 유저의 지우지 않은 소속 전부를 행 잠금(PESSIMISTIC_WRITE)으로 조회
+     * 주 부서 옮기기처럼 "한 사람에 주 부서 하나" 를 지켜야 하는 쓰기가 겹치지 않게 직렬화한다.
+     *
+     * @param userId 유저 ID
+     * @return 잠근 UserDepartment 목록
+     */
+    List<UserDepartment> findUserDepartmentsForUpdate(String userId);
+
+    /**
      * 특정 부서에 속하지 않은 유저 조회
      *
      * @param departmentId 부서 ID

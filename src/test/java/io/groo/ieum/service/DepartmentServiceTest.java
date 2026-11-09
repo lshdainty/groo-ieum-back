@@ -666,6 +666,11 @@ class DepartmentServiceTest {
             return company;
         }
 
+        /** 잠금 조회가 돌려주는 것 = 그 사람의 지우지 않은 소속 전부 */
+        private List<UserDepartment> activeOf(User user) {
+            return user.getUserDepartments().stream().filter(ud -> ud.getIsDeleted() == YNType.N).toList();
+        }
+
         private Department dept(String name, Long id, Company company) {
             Department d = Department.createDepartment(name, name, null, null, 1L, "설명", "#FF0000", company);
             setDepartmentId(d, id);
@@ -684,10 +689,13 @@ class DepartmentServiceTest {
             UserDepartment inB = UserDepartment.createUserDepartment(user, b, YNType.N);
             UserDepartment inC = UserDepartment.createUserDepartment(user, c, YNType.N);
             given(departmentRepository.findById(2L)).willReturn(Optional.of(b));
-            given(departmentRepository.findUserDepartment("user1", 2L)).willReturn(Optional.of(inB));
+            given(departmentRepository.findUserDepartmentsForUpdate("user1")).willReturn(activeOf(user));
 
             departmentService.changeMainDepartment(2L, "user1");
 
+            // 동시 요청이 겹쳐도 Y 가 하나만 남도록 소속 행을 잠그고 읽는 경로만 탄다 (잠금 없는 조회는 쓰지 않는다)
+            then(departmentRepository).should().findUserDepartmentsForUpdate("user1");
+            then(departmentRepository).should(never()).findUserDepartment(any(), any());
             assertThat(inA.getMainYN()).isEqualTo(YNType.N);
             assertThat(inB.getMainYN()).isEqualTo(YNType.Y);
             assertThat(inC.getMainYN()).isEqualTo(YNType.N);
@@ -702,7 +710,7 @@ class DepartmentServiceTest {
             User user = createTestUser("user1");
             UserDepartment inB = UserDepartment.createUserDepartment(user, b, YNType.N);
             given(departmentRepository.findById(2L)).willReturn(Optional.of(b));
-            given(departmentRepository.findUserDepartment("user1", 2L)).willReturn(Optional.of(inB));
+            given(departmentRepository.findUserDepartmentsForUpdate("user1")).willReturn(activeOf(user));
 
             departmentService.changeMainDepartment(2L, "user1");
 
@@ -719,7 +727,7 @@ class DepartmentServiceTest {
             UserDepartment inA = UserDepartment.createUserDepartment(user, a, YNType.Y);
             UserDepartment inB = UserDepartment.createUserDepartment(user, b, YNType.N);
             given(departmentRepository.findById(1L)).willReturn(Optional.of(a));
-            given(departmentRepository.findUserDepartment("user1", 1L)).willReturn(Optional.of(inA));
+            given(departmentRepository.findUserDepartmentsForUpdate("user1")).willReturn(activeOf(user));
 
             departmentService.changeMainDepartment(1L, "user1");
 
@@ -738,7 +746,7 @@ class DepartmentServiceTest {
             oldA.deleteUserDepartment(); // main 도 N 이 되고 isDeleted = Y
             UserDepartment inB = UserDepartment.createUserDepartment(user, b, YNType.N);
             given(departmentRepository.findById(2L)).willReturn(Optional.of(b));
-            given(departmentRepository.findUserDepartment("user1", 2L)).willReturn(Optional.of(inB));
+            given(departmentRepository.findUserDepartmentsForUpdate("user1")).willReturn(activeOf(user));
 
             departmentService.changeMainDepartment(2L, "user1");
 
@@ -756,7 +764,7 @@ class DepartmentServiceTest {
             User user = createTestUser("user1");
             UserDepartment inA = UserDepartment.createUserDepartment(user, a, YNType.Y);
             given(departmentRepository.findById(2L)).willReturn(Optional.of(b));
-            given(departmentRepository.findUserDepartment("user1", 2L)).willReturn(Optional.empty());
+            given(departmentRepository.findUserDepartmentsForUpdate("user1")).willReturn(activeOf(user));
 
             assertThatThrownBy(() -> departmentService.changeMainDepartment(2L, "user1"))
                     .isInstanceOf(EntityNotFoundException.class)

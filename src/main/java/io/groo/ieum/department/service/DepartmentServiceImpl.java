@@ -241,15 +241,19 @@ public class DepartmentServiceImpl implements DepartmentService {
         log.debug("주 부서 옮기기 시작: departmentId={}, userId={}", departmentId, userId);
         checkDepartmentExists(departmentId);
 
-        UserDepartment target = departmentRepository.findUserDepartment(userId, departmentId)
+        // 그 사람의 소속 행을 잠그고 읽는다 - 같은 사람에 대한 주 부서 쓰기가 겹쳐도 차례로 돌아 Y 가 하나만 남는다
+        List<UserDepartment> memberships = departmentRepository.findUserDepartmentsForUpdate(userId);
+        UserDepartment target = memberships.stream()
+                .filter(ud -> ud.getDepartment().getRowId().equals(departmentId))
+                .findFirst()
                 .orElseThrow(() -> {
                     log.warn("주 부서 옮기기 실패 - 이 부서의 구성원이 아님: userId={}, departmentId={}", userId, departmentId);
                     return new EntityNotFoundException(HrErrorCode.DEPARTMENT_NOT_FOUND);
                 });
 
         // 한 사람에게 주 부서는 하나 - 지우지 않은 다른 소속을 모두 주 부서가 아니게 한다 (지운 소속은 건드리지 않는다)
-        for (UserDepartment other : target.getUser().getUserDepartments()) {
-            if (other != target && YNType.isN(other.getIsDeleted()) && YNType.isY(other.getMainYN())) {
+        for (UserDepartment other : memberships) {
+            if (other != target && YNType.isY(other.getMainYN())) {
                 other.changeMain(YNType.N);
             }
         }

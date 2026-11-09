@@ -7,6 +7,7 @@ import io.groo.ieum.user.domain.User;
 import com.querydsl.jpa.JPAExpressions;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Repository;
@@ -72,6 +73,18 @@ public class DepartmentQueryDslRepository implements DepartmentRepository {
                 )
                 .fetchOne()
         );
+    }
+
+    @Override
+    public List<UserDepartment> findUserDepartmentsForUpdate(String userId) {
+        return query
+                .selectFrom(userDepartment)
+                .where(
+                        userDepartment.user.id.eq(userId),
+                        userDepartment.isDeleted.eq(YNType.N)
+                )
+                .setLockMode(LockModeType.PESSIMISTIC_WRITE)
+                .fetch();
     }
 
     @Override

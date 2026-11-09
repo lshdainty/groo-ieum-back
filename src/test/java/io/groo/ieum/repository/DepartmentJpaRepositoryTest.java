@@ -143,6 +143,37 @@ class DepartmentJpaRepositoryTest {
     }
 
     @Test
+    @DisplayName("특정 유저의 지우지 않은 소속 전부를 잠금 조회한다 (지운 소속 · 다른 유저 제외)")
+    void findUserDepartmentsForUpdate() {
+        // given
+        User user = createTestUser("user1", "테스트유저1", "user1@test.com");
+        User other = createTestUser("user2", "테스트유저2", "user2@test.com");
+        em.persist(user);
+        em.persist(other);
+        Department d1 = Department.createDepartment("개발팀", "개발팀", null, null, 1L, "개발 부서", "#FF0000", company);
+        Department d2 = Department.createDepartment("기획팀", "기획팀", null, null, 1L, "기획 부서", "#FF0000", company);
+        Department d3 = Department.createDepartment("영업팀", "영업팀", null, null, 1L, "영업 부서", "#FF0000", company);
+        departmentRepository.save(d1);
+        departmentRepository.save(d2);
+        departmentRepository.save(d3);
+        departmentRepository.saveUserDepartment(UserDepartment.createUserDepartment(user, d1, YNType.Y));
+        departmentRepository.saveUserDepartment(UserDepartment.createUserDepartment(user, d2, YNType.N));
+        UserDepartment removed = UserDepartment.createUserDepartment(user, d3, YNType.N);
+        departmentRepository.saveUserDepartment(removed);
+        removed.deleteUserDepartment();
+        departmentRepository.saveUserDepartment(UserDepartment.createUserDepartment(other, d1, YNType.Y));
+        em.flush();
+        em.clear();
+
+        // when
+        List<UserDepartment> found = departmentRepository.findUserDepartmentsForUpdate("user1");
+
+        // then
+        assertThat(found).hasSize(2);
+        assertThat(found).extracting(ud -> ud.getDepartment().getName()).containsExactlyInAnyOrder("개발팀", "기획팀");
+    }
+
+    @Test
     @DisplayName("특정 부서에 속하지 않은 유저 조회")
     void findUsersNotInDepartment() {
         // given
