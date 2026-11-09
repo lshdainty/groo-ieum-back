@@ -24,7 +24,8 @@ import static org.mockito.Mockito.verifyNoInteractions;
 @DisplayName("사용자 상세 조회 범위 테스트 (본인 또는 사용자/권한 관리)")
 class UserReadAccessTest {
     private final UserService userService = mock(UserService.class);
-    private final UserApiController controller = new UserApiController(userService, mock(MessageSource.class));
+    private final UserApiController controller = new UserApiController(userService, mock(MessageSource.class),
+            mock(io.groo.ieum.security.jwt.JwtTokenProvider.class), mock(io.groo.ieum.common.config.properties.JwtProperties.class));
     private final User me = User.createUser(
             null, "me", "나", "me@test.com", LocalDate.of(1990, 1, 1), "NONE", "9 ~ 18",
             LocalDate.now(), YNType.N, null, null, CountryCode.KR);

@@ -371,7 +371,8 @@ public interface UserApi {
                     required = true,
                     content = @Content(schema = @Schema(implementation = UserApiDto.ChangePasswordReq.class))
             )
-            @Valid @RequestBody UserApiDto.ChangePasswordReq data
+            @Valid @RequestBody UserApiDto.ChangePasswordReq data,
+            @Parameter(hidden = true) jakarta.servlet.http.HttpServletResponse response
     );
 
     @Operation(
