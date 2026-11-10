@@ -66,6 +66,7 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.BDDMockito.*;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 
 @Slf4j
 @ExtendWith(MockitoExtension.class)
@@ -1648,6 +1649,123 @@ class VacationServiceTest {
             // then
             assertThat(result).hasSize(1);
             assertThat(result.get(0).getType()).isEqualTo(VacationType.ANNUAL);
+        }
+    }
+
+    @Nested
+    @DisplayName("휴가 기록 사용 줄의 휴가 종류")
+    class UsageVacationTypes {
+        private VacationUsage usage(User user, long id) {
+            VacationUsage u = createTestUsage(user);
+            ReflectionTestUtils.setField(u, "rowId", id);
+            return u;
+        }
+
+        private VacationGrant grant(User user, VacationType type, long id) {
+            VacationGrant g = createTestGrant(user, type, new BigDecimal("5.0000"));
+            ReflectionTestUtils.setField(g, "rowId", id);
+            return g;
+        }
+
+        private VacationUsageDeduction deduction(VacationUsage u, VacationGrant g) {
+            return VacationUsageDeduction.createVacationUsageDeduction(u, g, new BigDecimal("1.0000"));
+        }
+
+        @Test
+        @DisplayName("성공 - 사용마다 첫 차감 부여의 종류가 실리고 차감 질의는 한 번이다")
+        void historyCarriesFirstDeductionTypeWithSingleQuery() {
+            User user = createTestUser("user1");
+            VacationUsage u1 = usage(user, 1L);
+            VacationUsage u2 = usage(user, 2L);
+            VacationGrant annual = grant(user, VacationType.ANNUAL, 11L);
+            VacationGrant overtime = grant(user, VacationType.OVERTIME, 12L);
+
+            given(userService.checkUserExist("user1")).willReturn(user);
+            given(vacationGrantRepository.findByUserIdAndYear("user1", 2025)).willReturn(List.of());
+            given(vacationUsageRepository.findByUserIdAndYear("user1", 2025)).willReturn(List.of(u1, u2));
+            // u1 은 부여 둘에서 차감(연차가 먼저), u2 는 연장
+            given(vacationUsageDeductionRepository.findByUsageIds(List.of(1L, 2L))).willReturn(List.of(
+                    deduction(u1, annual), deduction(u1, overtime), deduction(u2, overtime)));
+
+            VacationServiceDto result = vacationService.getUserVacationHistory("user1", 2025);
+
+            assertThat(result.getUsageVacationTypes())
+                    .containsEntry(1L, VacationType.ANNUAL)
+                    .containsEntry(2L, VacationType.OVERTIME);
+            then(vacationUsageDeductionRepository).should(times(1)).findByUsageIds(anyList());
+        }
+
+        @Test
+        @DisplayName("성공 - 사용이 없으면 빈 맵이고 차감을 읽지 않는다")
+        void historyWithoutUsagesDoesNotQueryDeductions() {
+            User user = createTestUser("user1");
+            given(userService.checkUserExist("user1")).willReturn(user);
+            given(vacationGrantRepository.findByUserIdAndYear("user1", 2025)).willReturn(List.of());
+            given(vacationUsageRepository.findByUserIdAndYear("user1", 2025)).willReturn(List.of());
+
+            VacationServiceDto result = vacationService.getUserVacationHistory("user1", 2025);
+
+            assertThat(result.getUsageVacationTypes()).isEmpty();
+            then(vacationUsageDeductionRepository).should(never()).findByUsageIds(anyList());
+        }
+
+        @Test
+        @DisplayName("성공 - 차감이 없는 사용은 종류가 없다")
+        void usageWithoutDeductionHasNoType() {
+            User user = createTestUser("user1");
+            VacationUsage u1 = usage(user, 1L);
+            given(userService.checkUserExist("user1")).willReturn(user);
+            given(vacationGrantRepository.findByUserIdAndYear("user1", 2025)).willReturn(List.of());
+            given(vacationUsageRepository.findByUserIdAndYear("user1", 2025)).willReturn(List.of(u1));
+            given(vacationUsageDeductionRepository.findByUsageIds(anyList())).willReturn(List.of());
+
+            VacationServiceDto result = vacationService.getUserVacationHistory("user1", 2025);
+
+            assertThat(result.getUsageVacationTypes()).doesNotContainKey(1L);
+        }
+
+        @Test
+        @DisplayName("성공 - 전체 사용자 기록도 차감 질의 한 번으로 종류를 싣는다")
+        void allUsersHistoryCarriesTypeWithSingleQuery() {
+            User a = createTestUser("a");
+            User b = createTestUser("b");
+            VacationUsage ua = usage(a, 1L);
+            VacationUsage ub = usage(b, 2L);
+            given(vacationGrantRepository.findAllWithUser()).willReturn(List.of());
+            given(vacationUsageRepository.findAllWithUser()).willReturn(List.of(ua, ub));
+            given(vacationUsageDeductionRepository.findByUsageIds(anyList())).willReturn(List.of(
+                    deduction(ua, grant(a, VacationType.WEDDING, 21L)),
+                    deduction(ub, grant(b, VacationType.HEALTH, 22L))));
+
+            List<VacationServiceDto> result = vacationService.getAllUsersVacationHistory();
+
+            assertThat(result).hasSize(2);
+            assertThat(result).allSatisfy(r -> assertThat(r.getUsageVacationTypes())
+                    .containsEntry(1L, VacationType.WEDDING).containsEntry(2L, VacationType.HEALTH));
+            then(vacationUsageDeductionRepository).should(times(1)).findByUsageIds(anyList());
+        }
+
+        @Test
+        @DisplayName("성공 - 기록과 캘린더가 같은 사용에 같은 종류를 준다")
+        void historyAndCalendarAgree() {
+            User user = createTestUser("user1");
+            VacationUsage u1 = usage(user, 1L);
+            List<VacationUsageDeduction> deductions = List.of(
+                    deduction(u1, grant(user, VacationType.BEREAVEMENT, 31L)),
+                    deduction(u1, grant(user, VacationType.ANNUAL, 32L)));
+            LocalDateTime start = LocalDateTime.of(2025, 1, 1, 0, 0);
+            LocalDateTime end = LocalDateTime.of(2025, 12, 31, 0, 0);
+            given(userService.checkUserExist("user1")).willReturn(user);
+            given(vacationGrantRepository.findByUserIdAndYear("user1", 2025)).willReturn(List.of());
+            given(vacationUsageRepository.findByUserIdAndYear("user1", 2025)).willReturn(List.of(u1));
+            given(vacationUsageRepository.findByPeriodWithUser(start, end)).willReturn(List.of(u1));
+            given(vacationUsageDeductionRepository.findByUsageIds(anyList())).willReturn(deductions);
+
+            VacationType fromHistory = vacationService.getUserVacationHistory("user1", 2025)
+                    .getUsageVacationTypes().get(1L);
+            VacationType fromCalendar = vacationService.getVacationUsagesByPeriod(start, end).get(0).getType();
+
+            assertThat(fromHistory).isEqualTo(VacationType.BEREAVEMENT).isEqualTo(fromCalendar);
         }
     }
 

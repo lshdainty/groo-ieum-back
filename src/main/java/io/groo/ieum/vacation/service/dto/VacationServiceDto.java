@@ -13,6 +13,7 @@ import lombok.Setter;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 @Getter @Setter
 @Builder
@@ -82,6 +83,8 @@ public class VacationServiceDto {
     private List<VacationGrant> grants;
     // 사용한 휴가 내역 리스트
     private List<VacationUsage> usages;
+    // 사용 내역 id -> 휴가 종류 (첫 차감 부여의 종류, 차감이 없으면 키 없음)
+    private Map<Long, VacationType> usageVacationTypes;
 
     // 휴가 신청 사유 (ON_REQUEST 방식)
     private String requestReason;

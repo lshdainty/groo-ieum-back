@@ -126,6 +126,8 @@ public class VacationApiDto {
             private String usedTimeStr;
             private LocalDateTime startDate;
             private LocalDateTime endDate;
+            private VacationType vacationType;
+            private String vacationTypeName;
         }
     }
 
@@ -166,6 +168,8 @@ public class VacationApiDto {
             private String usedTimeStr;
             private LocalDateTime startDate;
             private LocalDateTime endDate;
+            private VacationType vacationType;
+            private String vacationTypeName;
         }
     }
 
