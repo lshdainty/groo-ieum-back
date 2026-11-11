@@ -1,33 +1,12 @@
 package io.groo.ieum.common.config.database;
 
-import io.groo.core.security.AuditorPrincipal;
-import org.springframework.data.domain.AuditorAware;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
+import io.groo.core.security.AbstractAuditorAware;
 import org.springframework.stereotype.Component;
 
-import java.util.Optional;
-
 /**
- * JPA Auditing을 위한 AuditorAware 구현체
- * Spring Security의 SecurityContext에서 현재 로그인한 사용자의 ID를 가져옵니다.
+ * 작성자·수정자 기록 — core {@link AbstractAuditorAware} 기본 동작 그대로다(core 3.1.0 에서 공통화).
+ * 로그인 없는 쓰기와 낯선 주체는 비워 둔다. 담다만 {@code "system"} 으로 남긴다.
  */
 @Component("auditorAware")
-public class LoginUserAuditorAware implements AuditorAware<String> {
-
-    @Override
-    public Optional<String> getCurrentAuditor() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-
-        if (authentication == null || !authentication.isAuthenticated() || authentication.getPrincipal().equals("anonymousUser")) {
-            return Optional.empty();
-        }
-
-        // AuditorPrincipal 인터페이스를 구현한 객체에서 User ID 가져오기
-        if (authentication.getPrincipal() instanceof AuditorPrincipal auditorPrincipal) {
-            return Optional.ofNullable(auditorPrincipal.getUserId());
-        }
-
-        return Optional.empty();
-    }
+public class LoginUserAuditorAware extends AbstractAuditorAware {
 }
