@@ -13,9 +13,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -93,7 +97,7 @@ class RepeatGrantDescriptionGeneratorTest {
         }
 
         @Test
-        @DisplayName("2년 간격으로 매년 부여")
+        @DisplayName("2년마다 부여 — 단위를 두 번 말하지 않는다")
         void generateEveryTwoYears() {
             // given
             VacationPolicy policy = VacationPolicy.createRepeatGrantPolicy(
@@ -117,8 +121,8 @@ class RepeatGrantDescriptionGeneratorTest {
             String result = generator.generate(policy);
 
             // then
-            assertThat(result).contains("2년");
-            assertThat(result).contains("간격");
+            assertThat(result).isEqualTo("2년마다 1월 1일 부여");
+            assertThat(result).doesNotContain("간격", "매년");
         }
 
         @Test
@@ -264,7 +268,7 @@ class RepeatGrantDescriptionGeneratorTest {
             String result = generator.generate(policy);
 
             // then
-            assertThat(result).contains("1회 부여");
+            assertThat(result).isEqualTo("7년마다 1월 1일 부여, 1회만");
         }
     }
 
@@ -701,6 +705,51 @@ class RepeatGrantDescriptionGeneratorTest {
 
             // then
             assertThat(result).contains("on the 15th");
+        }
+    }
+
+    @Nested
+    @DisplayName("간격 · 지정 일 · 꼬리 — ko · en 이 같은 정보를 말한다")
+    class IntervalSideBySide {
+        private final KoreanRepeatGrantDescriptionGenerator korean = new KoreanRepeatGrantDescriptionGenerator();
+        private final EnglishRepeatGrantDescriptionGenerator english = new EnglishRepeatGrantDescriptionGenerator();
+
+        static Stream<Arguments> cases() {
+            return Stream.of(
+                    // 단위, 간격, 지정 월, 지정 일, 반복(Y) · 횟수, ko, en
+                    Arguments.of(RepeatUnit.YEARLY, 1, 1, 1, YNType.Y, null, "매년 1월 1일 부여", "Grant annually on January 1st"),
+                    Arguments.of(RepeatUnit.YEARLY, 2, 1, 1, YNType.Y, null, "2년마다 1월 1일 부여", "Grant every 2 years on January 1st"),
+                    Arguments.of(RepeatUnit.MONTHLY, 1, null, 15, YNType.Y, null, "매월 15일 부여", "Grant monthly on the 15th"),
+                    Arguments.of(RepeatUnit.MONTHLY, 2, null, 1, YNType.Y, null, "2개월마다 1일 부여", "Grant every 2 months on the 1st"),
+                    Arguments.of(RepeatUnit.QUARTERLY, 1, null, 1, YNType.Y, null, "분기마다 1일 부여", "Grant quarterly on the 1st"),
+                    Arguments.of(RepeatUnit.QUARTERLY, 2, null, 1, YNType.Y, null, "2분기마다 1일 부여", "Grant every 2 quarters on the 1st"),
+                    Arguments.of(RepeatUnit.HALF, 1, null, 1, YNType.Y, null, "반기마다 1일 부여", "Grant semi-annually on the 1st"),
+                    Arguments.of(RepeatUnit.HALF, 2, null, 1, YNType.Y, null, "2반기마다 1일 부여", "Grant every 2 half-years on the 1st"),
+                    Arguments.of(RepeatUnit.DAILY, 1, null, null, YNType.Y, null, "매일 부여", "Grant daily"),
+                    Arguments.of(RepeatUnit.DAILY, 3, null, null, YNType.Y, null, "3일마다 부여", "Grant every 3 days"),
+                    // 꼬리 — 정해진 횟수만(N년 후는 매년 단위만)
+                    Arguments.of(RepeatUnit.YEARLY, 1, 1, 1, YNType.N, 3, "매년 1월 1일 부여, 2년 후, 3회만", "Grant annually on January 1st, after 2 year(s), 3 time(s) only"),
+                    Arguments.of(RepeatUnit.YEARLY, 2, 1, 1, YNType.N, 3, "2년마다 1월 1일 부여, 4년 후, 3회만", "Grant every 2 years on January 1st, after 4 year(s), 3 time(s) only"),
+                    Arguments.of(RepeatUnit.YEARLY, 7, 1, 1, YNType.N, 1, "7년마다 1월 1일 부여, 1회만", "Grant every 7 years on January 1st, 1 time(s) only"),
+                    Arguments.of(RepeatUnit.MONTHLY, 2, null, 1, YNType.N, 4, "2개월마다 1일 부여, 4회만", "Grant every 2 months on the 1st, 4 time(s) only"),
+                    Arguments.of(RepeatUnit.QUARTERLY, 2, null, 1, YNType.N, 2, "2분기마다 1일 부여, 2회만", "Grant every 2 quarters on the 1st, 2 time(s) only")
+            );
+        }
+
+        @ParameterizedTest(name = "{0} 간격 {1} → \"{6}\" / \"{7}\"")
+        @MethodSource("cases")
+        void sameInformation(RepeatUnit unit, Integer interval, Integer months, Integer days, YNType recurring, Integer maxCount, String ko, String en) {
+            VacationPolicy policy = VacationPolicy.createRepeatGrantPolicy(
+                    "정책", "설명", VacationType.ANNUAL, new BigDecimal("1.0000"), YNType.N,
+                    unit, interval, months, days,
+                    LocalDateTime.of(2025, 1, 1, 0, 0), recurring, maxCount,
+                    EffectiveType.START_OF_YEAR, ExpirationType.END_OF_YEAR
+            );
+
+            assertThat(korean.generate(policy)).isEqualTo(ko);
+            assertThat(english.generate(policy)).isEqualTo(en);
+            // 단위 · "부여" 를 두 번 말하지 않는다 — "2분기 간격으로 분기마다" · "…부여 2회 부여" 같은 글이 다시 생기지 않게
+            assertThat(korean.generate(policy)).doesNotContain("간격", "회 부여");
         }
     }
 }

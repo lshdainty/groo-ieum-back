@@ -628,7 +628,7 @@ class RepeatGrantTest {
         }
 
         @Test
-        @DisplayName("성공 - 2년 간격 정책의 설명을 생성한다")
+        @DisplayName("성공 - 2년 간격 정책의 설명을 생성한다(\"2년마다\" — 단위를 두 번 말하지 않는다)")
         void generateBiennialDescription() {
             // given
             VacationPolicy policy = createTestRepeatPolicy(RepeatUnit.YEARLY, 2);
@@ -637,8 +637,8 @@ class RepeatGrantTest {
             String result = koreanGenerator.generate(policy);
 
             // then
-            assertThat(result).contains("2년");
-            assertThat(result).contains("간격");
+            assertThat(result).startsWith("2년마다");
+            assertThat(result).doesNotContain("간격", "매년");
         }
 
         @Test
