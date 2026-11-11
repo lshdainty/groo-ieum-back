@@ -17,6 +17,7 @@ import java.time.LocalDateTime;
  * - "분기마다 1일 부여" · "2분기마다 1일 부여"
  * - "반기마다 부여" · "3일마다 부여"
  * 간격이 2 이상이면 "{N}{단위}마다" 하나로 말한다 — "2분기 간격으로 분기마다" 처럼 단위를 두 번 말하지 않는다.
+ * 횟수를 정한 정책은 ", {N}회만" 꼬리(매년은 앞에 ", {N}년 후") — "2분기마다 1일 부여, 2회만" · "매년 1월 1일 부여, 2년 후, 3회만".
  * 간격은 첫 부여일이 든 주기부터 센다(RepeatGrant.calculateNextGrantDate) — 글은 그 계산의 "N 주기마다" 와 같다.
  */
 @Component
@@ -86,7 +87,8 @@ public class KoreanRepeatGrantDescriptionGenerator implements RepeatGrantDescrip
                     description.append(", ").append(yearsLater).append("년 후");
                 }
             }
-            description.append(" ").append(maxGrantCount).append("회 부여");
+            // 영어 ", N time(s) only" 와 같은 뜻 — "부여" 를 두 번 말하지 않는다("…부여, 2회만")
+            description.append(", ").append(maxGrantCount).append("회만");
         }
 
         return description.toString();

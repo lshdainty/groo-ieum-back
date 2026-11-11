@@ -268,7 +268,7 @@ class RepeatGrantDescriptionGeneratorTest {
             String result = generator.generate(policy);
 
             // then
-            assertThat(result).contains("1회 부여");
+            assertThat(result).isEqualTo("7년마다 1월 1일 부여, 1회만");
         }
     }
 
@@ -728,8 +728,11 @@ class RepeatGrantDescriptionGeneratorTest {
                     Arguments.of(RepeatUnit.DAILY, 1, null, null, YNType.Y, null, "매일 부여", "Grant daily"),
                     Arguments.of(RepeatUnit.DAILY, 3, null, null, YNType.Y, null, "3일마다 부여", "Grant every 3 days"),
                     // 꼬리 — 정해진 횟수만(N년 후는 매년 단위만)
-                    Arguments.of(RepeatUnit.YEARLY, 2, 1, 1, YNType.N, 3, "2년마다 1월 1일 부여, 4년 후 3회 부여", "Grant every 2 years on January 1st, after 4 year(s), 3 time(s) only"),
-                    Arguments.of(RepeatUnit.QUARTERLY, 2, null, 1, YNType.N, 2, "2분기마다 1일 부여 2회 부여", "Grant every 2 quarters on the 1st, 2 time(s) only")
+                    Arguments.of(RepeatUnit.YEARLY, 1, 1, 1, YNType.N, 3, "매년 1월 1일 부여, 2년 후, 3회만", "Grant annually on January 1st, after 2 year(s), 3 time(s) only"),
+                    Arguments.of(RepeatUnit.YEARLY, 2, 1, 1, YNType.N, 3, "2년마다 1월 1일 부여, 4년 후, 3회만", "Grant every 2 years on January 1st, after 4 year(s), 3 time(s) only"),
+                    Arguments.of(RepeatUnit.YEARLY, 7, 1, 1, YNType.N, 1, "7년마다 1월 1일 부여, 1회만", "Grant every 7 years on January 1st, 1 time(s) only"),
+                    Arguments.of(RepeatUnit.MONTHLY, 2, null, 1, YNType.N, 4, "2개월마다 1일 부여, 4회만", "Grant every 2 months on the 1st, 4 time(s) only"),
+                    Arguments.of(RepeatUnit.QUARTERLY, 2, null, 1, YNType.N, 2, "2분기마다 1일 부여, 2회만", "Grant every 2 quarters on the 1st, 2 time(s) only")
             );
         }
 
@@ -745,8 +748,8 @@ class RepeatGrantDescriptionGeneratorTest {
 
             assertThat(korean.generate(policy)).isEqualTo(ko);
             assertThat(english.generate(policy)).isEqualTo(en);
-            // 단위를 두 번 말하지 않는다 — "2분기 간격으로 분기마다" 같은 글이 다시 생기지 않게
-            assertThat(korean.generate(policy)).doesNotContain("간격");
+            // 단위 · "부여" 를 두 번 말하지 않는다 — "2분기 간격으로 분기마다" · "…부여 2회 부여" 같은 글이 다시 생기지 않게
+            assertThat(korean.generate(policy)).doesNotContain("간격", "회 부여");
         }
     }
 }
