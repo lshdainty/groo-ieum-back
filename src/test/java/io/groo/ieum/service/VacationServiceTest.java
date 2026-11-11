@@ -47,6 +47,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Spy;
@@ -1011,6 +1013,55 @@ class VacationServiceTest {
 
             // then
             assertThat(result).isNotNull();
+        }
+
+        @ParameterizedTest(name = "{0} 하나는 승인 {1}")
+        @CsvSource({
+                "ACTIVE,1", "EXHAUSTED,1", "EXPIRED,1",
+                "PENDING,0", "PROGRESS,0", "REJECTED,0", "CANCELED,0", "REVOKED,0"
+        })
+        @DisplayName("승인 수는 목록 배지가 승인으로 그리는 상태(활성 · 소진 · 만료)만 센다")
+        void approvedCountByStatus(GrantStatus status, long expectedApproved) {
+            String userId = "user1";
+            User user = createTestUser(userId);
+            given(userService.checkUserExist(userId)).willReturn(user);
+            given(vacationGrantRepository.findAllRequestedVacationsByUserIdAndYear(userId, 2025))
+                    .willReturn(List.of(statGrant(user, status, "2.0000")));
+            given(vacationTimeFormatter.format(any(BigDecimal.class))).willReturn("x");
+
+            VacationServiceDto result = vacationService.getRequestedVacationStatsByUserId(userId, 2025);
+
+            assertThat(result.getApprovedCount()).isEqualTo(expectedApproved);
+            assertThat(result.getApprovalRate()).isEqualTo(expectedApproved * 100.0);
+            assertThat(result.getAcquiredVacationTime())
+                    .isEqualByComparingTo(expectedApproved == 1 ? new BigDecimal("2.0000") : BigDecimal.ZERO);
+        }
+
+        @Test
+        @DisplayName("섞인 아홉 건 - 활성 1 · 소진 1 · 만료 1 이면 승인 3, 승인율 33.3%, 받은 휴가는 셋의 합")
+        void approvedCountMixed() {
+            String userId = "user1";
+            User user = createTestUser(userId);
+            given(userService.checkUserExist(userId)).willReturn(user);
+            given(vacationGrantRepository.findAllRequestedVacationsByUserIdAndYear(userId, 2025))
+                    .willReturn(List.of(
+                            statGrant(user, GrantStatus.ACTIVE, "1.0000"),
+                            statGrant(user, GrantStatus.EXHAUSTED, "2.0000"),
+                            statGrant(user, GrantStatus.EXPIRED, "3.0000"),
+                            statGrant(user, GrantStatus.PENDING, "10.0000"),
+                            statGrant(user, GrantStatus.PROGRESS, "10.0000"),
+                            statGrant(user, GrantStatus.REJECTED, "10.0000"),
+                            statGrant(user, GrantStatus.CANCELED, "10.0000"),
+                            statGrant(user, GrantStatus.REVOKED, "10.0000"),
+                            statGrant(user, GrantStatus.PENDING, "10.0000")));
+            given(vacationTimeFormatter.format(any(BigDecimal.class))).willReturn("x");
+
+            VacationServiceDto result = vacationService.getRequestedVacationStatsByUserId(userId, 2025);
+
+            assertThat(result.getTotalRequestCount()).isEqualTo(9);
+            assertThat(result.getApprovedCount()).isEqualTo(3);
+            assertThat(result.getApprovalRate()).isCloseTo(33.33, org.assertj.core.data.Offset.offset(0.01));
+            assertThat(result.getAcquiredVacationTime()).isEqualByComparingTo(new BigDecimal("6.0000"));
         }
     }
 
@@ -2089,6 +2140,15 @@ class VacationServiceTest {
                 LocalDate.of(1990, 1, 1), "NONE", "9 ~ 18",
                 LocalDate.now(), YNType.N, null, null, CountryCode.KR
         );
+    }
+
+    private VacationGrant statGrant(User user, GrantStatus status, String grantTime) {
+        VacationPolicy policy = createTestPolicy();
+        VacationGrant grant = VacationGrant.createPendingVacationGrant(
+                user, policy, "신청", VacationType.ANNUAL, new BigDecimal(grantTime),
+                LocalDateTime.of(2025, 3, 10, 9, 0), null, "사유");
+        ReflectionTestUtils.setField(grant, "status", status);
+        return grant;
     }
 
     private VacationGrant createTestGrant(User user) {

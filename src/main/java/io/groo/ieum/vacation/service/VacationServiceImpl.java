@@ -1385,6 +1385,13 @@ public class VacationServiceImpl implements VacationService {
                 .toList();
     }
 
+    /**
+     * 목록 배지가 "승인" 으로 그리는 상태(ACTIVE · EXHAUSTED · EXPIRED) — 승인을 거친 신청
+     */
+    private static boolean isApprovedStatus(GrantStatus status) {
+        return status == GrantStatus.ACTIVE || status == GrantStatus.EXHAUSTED || status == GrantStatus.EXPIRED;
+    }
+
     @Override
     public VacationServiceDto getRequestedVacationStatsByUserId(String userId, Integer year) {
         // 사용자 존재 확인
@@ -1454,7 +1461,7 @@ public class VacationServiceImpl implements VacationService {
 
         // 7. 승인 건수
         long approvedCount = allGrants.stream()
-                .filter(grant -> grant.getStatus() == GrantStatus.ACTIVE)
+                .filter(grant -> isApprovedStatus(grant.getStatus()))
                 .count();
 
         // 8. 승인율 계산
@@ -1475,7 +1482,7 @@ public class VacationServiceImpl implements VacationService {
 
         // 11. 획득 휴가 시간 (승인된 건만)
         BigDecimal acquiredVacationTime = allGrants.stream()
-                .filter(grant -> grant.getStatus() == GrantStatus.ACTIVE)
+                .filter(grant -> isApprovedStatus(grant.getStatus()))
                 .map(VacationGrant::getGrantTime)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
