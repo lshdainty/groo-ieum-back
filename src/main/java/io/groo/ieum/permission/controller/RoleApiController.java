@@ -11,7 +11,6 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -98,7 +97,7 @@ public class RoleApiController implements RoleApi {
     }
 
     /**
-     * 역할 수정 (설명 및/또는 권한)
+     * 역할 수정 (이름 · 설명 및/또는 권한)
      * PUT /api/v1/roles/{roleCode}
      *
      * @param roleCode 역할 코드
@@ -108,16 +107,18 @@ public class RoleApiController implements RoleApi {
     @Override
     @PreAuthorize("hasAuthority('ROLE:MANAGE')")
     public ApiResponse<Void> updateRole(String roleCode, RoleApiDto.UpdateRoleReq req) {
+        // 칸이 없으면(null) 그대로 둔다. 설명을 빈 글로 보내면 설명을 지운다
         if (req.getPermissionCodes() != null && !req.getPermissionCodes().isEmpty()) {
-            // 설명 + 권한 둘 다 수정
+            // 이름 · 설명 + 권한 같이 수정
             roleService.updateRoleWithPermissions(
                     roleCode,
+                    req.getRoleName(),
                     req.getDesc(),
                     req.getPermissionCodes()
             );
-        } else if (StringUtils.hasText(req.getDesc())) {
-            // 설명만 수정
-            roleService.updateRole(roleCode, req.getDesc());
+        } else if (req.getRoleName() != null || req.getDesc() != null) {
+            // 이름 · 설명만 수정
+            roleService.updateRole(roleCode, req.getRoleName(), req.getDesc());
         }
         return ApiResponse.success();
     }

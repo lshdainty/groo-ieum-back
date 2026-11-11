@@ -82,7 +82,10 @@ public class RoleApiDto {
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     @Schema(description = "역할 수정 요청")
     public static class UpdateRoleReq {
-        @Schema(description = "설명", example = "시스템 관리자 역할")
+        @Schema(description = "역할 이름 (선택 — 없으면 그대로, 빈 글이거나 20자를 넘으면 400)", example = "관리자")
+        private String roleName;
+
+        @Schema(description = "설명 (선택 — 없으면 그대로, 빈 글이면 설명을 지움)", example = "시스템 관리자 역할")
         private String desc;
 
         @Schema(description = "권한 코드 목록 (선택)", example = "[\"USER_READ\", \"USER_MANAGE\"]")

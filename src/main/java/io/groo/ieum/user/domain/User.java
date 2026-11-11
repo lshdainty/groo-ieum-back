@@ -300,6 +300,16 @@ public class User extends AuditingFieldsWithIp {
     }
 
     /**
+     * 프로필 사진 지우기<br>
+     * updateUser 는 null 을 "바꾸지 않음"으로 보므로 사진을 지울 때는 이 메소드를 쓴다.<br>
+     * 원본 파일은 남긴다(다른 기록이 같은 파일을 가리킬 수 있어 물리 삭제는 하지 않는다)
+     */
+    public void removeProfile() {
+        this.profileName = null;
+        this.profileUUID = null;
+    }
+
+    /**
      * 유저 삭제 함수<br>
      * Entity의 경우 Setter없이 Getter만 사용<br>
      * 해당 메소드를 통해 유저 삭제할 것

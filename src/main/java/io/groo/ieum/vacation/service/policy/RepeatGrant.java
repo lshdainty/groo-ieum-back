@@ -15,6 +15,7 @@ import lombok.RequiredArgsConstructor;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.Objects;
 
 @RequiredArgsConstructor
@@ -320,20 +321,20 @@ public class RepeatGrant implements VacationPolicyStrategy {
                     policy.getSpecificMonths(), policy.getSpecificDays());
 
             case MONTHLY:
-                // 매월 부여: 매월 1일에 부여 (요구사항 기준)
-                return calculateNextMonthlyDate(baseDate, repeatInterval, policy.getSpecificDays());
+                // 매월 부여: interval 개월마다 지정 일(없으면 1일)
+                return calculateNextPeriodicDate(firstDate, baseDate, 1, repeatInterval, policy.getSpecificDays());
 
             case DAILY:
-                // 매일 부여
-                return baseDate.plusDays(repeatInterval);
+                // 매일 부여: 첫 부여일부터 interval 일마다
+                return calculateNextDailyDate(firstDate, baseDate, repeatInterval);
 
             case QUARTERLY:
-                // 분기별 부여: 3개월마다
-                return calculateNextQuarterlyDate(baseDate, policy.getSpecificDays());
+                // 분기별 부여: interval 분기마다 분기 시작월(1·4·7·10월)의 지정 일
+                return calculateNextPeriodicDate(firstDate, baseDate, 3, repeatInterval, policy.getSpecificDays());
 
             case HALF:
-                // 반기별 부여: 6개월마다
-                return calculateNextHalfYearlyDate(baseDate, policy.getSpecificDays());
+                // 반기별 부여: interval 반기마다 반기 시작월(1·7월)의 지정 일
+                return calculateNextPeriodicDate(firstDate, baseDate, 6, repeatInterval, policy.getSpecificDays());
 
             default:
                 throw new InvalidValueException(ErrorCode.UNSUPPORTED_TYPE);
@@ -384,97 +385,55 @@ public class RepeatGrant implements VacationPolicyStrategy {
     }
 
     /**
-     * 매월 부여의 다음 부여일 계산<br>
-     * specificDays 지정 시 매월 해당 일에 부여 (없으면 1일)<br>
-     * 해당 월에 지정된 일이 없으면 해당 월의 마지막 날로 조정<br>
-     * 예: days=31이면 1월31일, 2월28일(or29일), 3월31일...
+     * 매월 · 분기 · 반기 부여의 다음 부여일 계산<br>
+     * 주기의 시작월(매월=그 달, 분기=1·4·7·10월, 반기=1·7월)의 지정 일에 부여한다(없으면 1일).
+     * 해당 월에 지정된 일이 없으면 그 달의 마지막 날로 조정한다(예: 분기 31일 → 1/31, 4/30, 7/31, 10/31).<br>
+     * 간격은 첫 부여일이 든 주기부터 센다 — 2분기 간격이고 첫 부여일이 2월이면 1월 · 7월 · 다음 해 1월 … 분기가 부여 주기다.<br>
+     * 스케줄러는 상태 없이 "어제 기준 다음 부여일 == 오늘" 로 부여를 판정하므로, 기준일이 아니라 첫 부여일에 묶어야
+     * 간격이 2 이상일 때 매 주기 부여되거나(예전 매월) 지정 일이 1일이 아닐 때 영영 부여되지 않는(예전 분기 · 반기) 일이 없다.
      *
-     * @param baseDate 기준일
-     * @param interval 반복 간격 (월)
+     * @param firstDate 첫 부여일
+     * @param baseDate 기준일 (첫 부여일 이후)
+     * @param periodMonths 한 주기의 개월 수 (매월 1 · 분기 3 · 반기 6)
+     * @param interval 반복 간격 (주기 수)
      * @param specificDays 특정 일 (null이면 1일)
-     * @return 다음 부여일
+     * @return 기준일보다 뒤인 첫 부여일
      */
-    private LocalDate calculateNextMonthlyDate(LocalDate baseDate, int interval, Integer specificDays) {
+    private LocalDate calculateNextPeriodicDate(LocalDate firstDate, LocalDate baseDate, int periodMonths,
+                                                int interval, Integer specificDays) {
         int targetDay = specificDays != null ? specificDays : 1;
+        int stepMonths = periodMonths * interval;
 
-        // 현재 달의 targetDay
-        LocalDate targetDateThisMonth = adjustToValidDate(baseDate.getYear(), baseDate.getMonthValue(), targetDay);
+        // 월을 "연*12 + (월-1)" 하나의 수로 센다. 첫 부여일이 든 주기의 시작월이 기준점이다
+        int firstMonthIndex = firstDate.getYear() * 12 + firstDate.getMonthValue() - 1;
+        int anchorIndex = firstMonthIndex - Math.floorMod(firstMonthIndex, periodMonths);
+        int baseMonthIndex = baseDate.getYear() * 12 + baseDate.getMonthValue() - 1;
 
-        // 기준일이 이번 달 targetDay보다 뒤라면 다음 달
-        if (baseDate.isAfter(targetDateThisMonth) || baseDate.equals(targetDateThisMonth)) {
-            LocalDate nextMonth = baseDate.plusMonths(interval);
-            return adjustToValidDate(nextMonth.getYear(), nextMonth.getMonthValue(), targetDay);
+        // 기준일이 든 달 이전의 마지막 주기부터 보면 두 번 안에 기준일 뒤의 부여일이 나온다
+        long step = Math.max(0, (baseMonthIndex - anchorIndex) / stepMonths);
+        while (true) {
+            int monthIndex = Math.toIntExact(anchorIndex + step * stepMonths);
+            LocalDate candidate = adjustToValidDate(monthIndex / 12, monthIndex % 12 + 1, targetDay);
+            if (candidate.isAfter(baseDate)) {
+                return candidate;
+            }
+            step++;
         }
-
-        return targetDateThisMonth;
     }
 
     /**
-     * 분기별 부여의 다음 부여일 계산<br>
-     * specificDays 지정 시 각 분기 시작월(1,4,7,10월)의 해당 일에 부여<br>
-     * 해당 월에 지정된 일이 없으면 해당 월의 마지막 날로 조정<br>
-     * 예: days=31이면 1/31, 4/30, 7/31, 10/31
+     * 매일 부여의 다음 부여일 계산<br>
+     * 첫 부여일부터 interval 일마다 부여한다. 기준일이 아니라 첫 부여일에 묶는다 —
+     * 스케줄러가 "어제 + interval == 오늘" 을 보던 예전 계산은 간격이 2 이상이면 한 번도 맞지 않았다.
      *
-     * @param baseDate 기준일
-     * @param specificDays 특정 일 (null이면 1일)
-     * @return 다음 부여일
+     * @param firstDate 첫 부여일
+     * @param baseDate 기준일 (첫 부여일 이후)
+     * @param interval 반복 간격 (일)
+     * @return 기준일보다 뒤인 첫 부여일
      */
-    private LocalDate calculateNextQuarterlyDate(LocalDate baseDate, Integer specificDays) {
-        int currentYear = baseDate.getYear();
-        int currentMonth = baseDate.getMonthValue();
-        int targetDay = specificDays != null ? specificDays : 1;
-
-        // 다음 분기 시작월 계산 (1, 4, 7, 10월)
-        int nextQuarterStartMonth = ((currentMonth - 1) / 3 + 1) * 3 + 1;
-
-        LocalDate nextDate;
-        if (nextQuarterStartMonth > 12) {
-            // 내년 1월
-            nextDate = adjustToValidDate(currentYear + 1, 1, targetDay);
-        } else {
-            // 같은 해의 다음 분기
-            nextDate = adjustToValidDate(currentYear, nextQuarterStartMonth, targetDay);
-        }
-
-        // 이미 지난 날짜면 다음 분기로
-        if (!nextDate.isAfter(baseDate)) {
-            LocalDate temp = nextDate.plusMonths(3);
-            nextDate = adjustToValidDate(temp.getYear(), temp.getMonthValue(), targetDay);
-        }
-
-        return nextDate;
-    }
-
-    /**
-     * 반기별 부여의 다음 부여일 계산<br>
-     * specificDays 지정 시 각 반기 시작월(1,7월)의 해당 일에 부여<br>
-     * 해당 월에 지정된 일이 없으면 해당 월의 마지막 날로 조정<br>
-     * 예: days=31이면 1/31, 7/31
-     *
-     * @param baseDate 기준일
-     * @param specificDays 특정 일 (null이면 1일)
-     * @return 다음 부여일
-     */
-    private LocalDate calculateNextHalfYearlyDate(LocalDate baseDate, Integer specificDays) {
-        int currentYear = baseDate.getYear();
-        int currentMonth = baseDate.getMonthValue();
-        int targetDay = specificDays != null ? specificDays : 1;
-
-        LocalDate nextDate;
-        if (currentMonth < 7) {
-            // 상반기: 7월
-            nextDate = adjustToValidDate(currentYear, 7, targetDay);
-        } else {
-            // 하반기: 내년 1월
-            nextDate = adjustToValidDate(currentYear + 1, 1, targetDay);
-        }
-
-        // 이미 지난 날짜면 6개월 추가
-        if (!nextDate.isAfter(baseDate)) {
-            LocalDate temp = nextDate.plusMonths(6);
-            nextDate = adjustToValidDate(temp.getYear(), temp.getMonthValue(), targetDay);
-        }
-
-        return nextDate;
+    private LocalDate calculateNextDailyDate(LocalDate firstDate, LocalDate baseDate, int interval) {
+        long daysSinceFirst = ChronoUnit.DAYS.between(firstDate, baseDate);
+        long nextStep = daysSinceFirst / interval + 1;
+        return firstDate.plusDays(nextStep * interval);
     }
 }

@@ -220,6 +220,7 @@ public class UserApiController implements UserApi {
                 .lunarYN(data.getLunarYn())
                 .profileUrl(data.getProfileUrl())
                 .profileUUID(data.getProfileUuid())
+                .profileDeleteYN(data.getProfileDeleteYn())
                 .dashboard(data.getDashboard())
                 .countryCode(data.getCountryCode())
                 .build(),

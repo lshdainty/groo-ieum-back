@@ -476,6 +476,53 @@ class UserServiceTest {
         }
 
         @Test
+        @DisplayName("성공 - 사진 지우기(Y)가 오면 사진 이름 · UUID 가 지워지고 다른 칸은 그대로 반영된다")
+        void editUserRemoveProfile() {
+            User user = User.createUser(null, "user1", "이서준", "user1@test.com",
+                    LocalDate.of(1990, 1, 1), "NONE", "9 ~ 18",
+                    LocalDate.now(), YNType.N, "me.png", "uuid-1", CountryCode.KR);
+            given(userRepository.findById("user1")).willReturn(Optional.of(user));
+
+            userService.editUser(UserServiceDto.builder().id("user1").name("이하은")
+                    .profileDeleteYN(YNType.Y).build(), "user1", false);
+
+            assertThat(user.getProfileName()).isNull();
+            assertThat(user.getProfileUUID()).isNull();
+            assertThat(user.getName()).isEqualTo("이하은");
+        }
+
+        @Test
+        @DisplayName("성공 - 사진 지우기와 새 사진이 같이 오면 지우기가 이긴다(임시 사진을 옮기지 않는다)")
+        void editUserRemoveProfileWinsOverNewPhoto() {
+            User user = User.createUser(null, "user1", "이서준", "user1@test.com",
+                    LocalDate.of(1990, 1, 1), "NONE", "9 ~ 18",
+                    LocalDate.now(), YNType.N, "me.png", "uuid-1", CountryCode.KR);
+            given(userRepository.findById("user1")).willReturn(Optional.of(user));
+
+            userService.editUser(UserServiceDto.builder().id("user1")
+                    .profileUUID("uuid-2").profileUrl("/upload/temp/profile/x.png")
+                    .profileDeleteYN(YNType.Y).build(), "user1", false);
+
+            assertThat(user.getProfileName()).isNull();
+            assertThat(user.getProfileUUID()).isNull();
+        }
+
+        @Test
+        @DisplayName("성공 - 사진 지우기가 없거나 N 이면 지금 사진을 그대로 둔다")
+        void editUserKeepsProfileWithoutDeleteFlag() {
+            User user = User.createUser(null, "user1", "이서준", "user1@test.com",
+                    LocalDate.of(1990, 1, 1), "NONE", "9 ~ 18",
+                    LocalDate.now(), YNType.N, "me.png", "uuid-1", CountryCode.KR);
+            given(userRepository.findById("user1")).willReturn(Optional.of(user));
+
+            userService.editUser(UserServiceDto.builder().id("user1").name("이하은").build(), "user1", false);
+            userService.editUser(UserServiceDto.builder().id("user1").profileDeleteYN(YNType.N).build(), "user1", false);
+
+            assertThat(user.getProfileName()).isEqualTo("me.png");
+            assertThat(user.getProfileUUID()).isEqualTo("uuid-1");
+        }
+
+        @Test
         @DisplayName("실패 - 존재하지 않는 유저를 수정하려 하면 예외가 발생한다")
         void editUserFailNotFound() {
             // given

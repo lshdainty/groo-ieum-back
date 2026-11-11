@@ -25,6 +25,8 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -477,6 +479,119 @@ class RepeatGrantTest {
 
             // then
             assertThat(result).isEqualTo(LocalDate.of(2026, 1, 1));
+        }
+    }
+
+    /**
+     * 스케줄러가 부여하는 날 — VacationGrantScheduler 는 "어제 기준 다음 부여일 == 오늘" 인 날에만 부여한다.
+     * 계산 함수만 보면 지나치는 상태 없는 판정의 함정(간격 무시 · 영영 안 맞음)을 그대로 재현한다.
+     */
+    private List<LocalDate> grantDays(VacationPolicy policy, LocalDate from, LocalDate to) {
+        List<LocalDate> days = new ArrayList<>();
+        for (LocalDate d = from; !d.isAfter(to); d = d.plusDays(1)) {
+            if (d.equals(repeatGrant.calculateNextGrantDate(policy, d.minusDays(1)))) {
+                days.add(d);
+            }
+        }
+        return days;
+    }
+
+    private VacationPolicy policyOf(RepeatUnit unit, int interval, LocalDate first, Integer specificDays) {
+        VacationPolicy policy = createTestRepeatPolicy(unit, interval);
+        ReflectionTestUtils.setField(policy, "firstGrantDate", first.atStartOfDay());
+        ReflectionTestUtils.setField(policy, "specificDays", specificDays);
+        return policy;
+    }
+
+    @Nested
+    @DisplayName("스케줄러가 실제로 부여하는 날 (간격 · 지정 일)")
+    class SchedulerGrantDays {
+        @Test
+        @DisplayName("분기 · 15일 — 매 분기 시작월 15일에 부여된다 (예전엔 1일이 아니면 한 번도 부여되지 않았다)")
+        void quarterlySpecificDay() {
+            VacationPolicy policy = policyOf(RepeatUnit.QUARTERLY, 1, LocalDate.of(2025, 1, 15), 15);
+
+            assertThat(grantDays(policy, LocalDate.of(2025, 1, 1), LocalDate.of(2025, 12, 31)))
+                    .containsExactly(LocalDate.of(2025, 1, 15), LocalDate.of(2025, 4, 15),
+                            LocalDate.of(2025, 7, 15), LocalDate.of(2025, 10, 15));
+        }
+
+        @Test
+        @DisplayName("2분기 간격 — 첫 부여 분기부터 두 분기마다 (예전엔 간격을 무시하고 매 분기)")
+        void quarterlyInterval() {
+            VacationPolicy policy = policyOf(RepeatUnit.QUARTERLY, 2, LocalDate.of(2025, 1, 1), null);
+
+            assertThat(grantDays(policy, LocalDate.of(2025, 1, 1), LocalDate.of(2026, 6, 30)))
+                    .containsExactly(LocalDate.of(2025, 1, 1), LocalDate.of(2025, 7, 1), LocalDate.of(2026, 1, 1));
+        }
+
+        @Test
+        @DisplayName("2분기 간격 · 첫 부여일이 분기 중간 — 첫 부여일 뒤로는 그 분기에서 두 분기씩 센다")
+        void quarterlyIntervalFirstMidQuarter() {
+            VacationPolicy policy = policyOf(RepeatUnit.QUARTERLY, 2, LocalDate.of(2025, 2, 10), null);
+
+            assertThat(grantDays(policy, LocalDate.of(2025, 1, 1), LocalDate.of(2026, 3, 31)))
+                    .containsExactly(LocalDate.of(2025, 2, 10), LocalDate.of(2025, 7, 1), LocalDate.of(2026, 1, 1));
+        }
+
+        @Test
+        @DisplayName("반기 · 31일 — 1/31 · 7/31 에 부여된다 (예전엔 한 번도 부여되지 않았다)")
+        void halfSpecificDay() {
+            VacationPolicy policy = policyOf(RepeatUnit.HALF, 1, LocalDate.of(2025, 1, 31), 31);
+
+            assertThat(grantDays(policy, LocalDate.of(2025, 1, 1), LocalDate.of(2026, 1, 31)))
+                    .containsExactly(LocalDate.of(2025, 1, 31), LocalDate.of(2025, 7, 31), LocalDate.of(2026, 1, 31));
+        }
+
+        @Test
+        @DisplayName("2반기 간격 — 1년에 한 번 (예전엔 간격을 무시하고 반기마다)")
+        void halfInterval() {
+            VacationPolicy policy = policyOf(RepeatUnit.HALF, 2, LocalDate.of(2025, 7, 1), null);
+
+            assertThat(grantDays(policy, LocalDate.of(2025, 1, 1), LocalDate.of(2027, 1, 31)))
+                    .containsExactly(LocalDate.of(2025, 7, 1), LocalDate.of(2026, 7, 1));
+        }
+
+        @Test
+        @DisplayName("분기 · 반기 간격 1 · 1일 — 예전과 같은 날에 부여된다")
+        void intervalOneUnchanged() {
+            VacationPolicy quarterly = policyOf(RepeatUnit.QUARTERLY, 1, LocalDate.of(2025, 1, 1), null);
+            VacationPolicy half = policyOf(RepeatUnit.HALF, 1, LocalDate.of(2025, 1, 1), null);
+
+            assertThat(grantDays(quarterly, LocalDate.of(2025, 1, 1), LocalDate.of(2025, 12, 31)))
+                    .containsExactly(LocalDate.of(2025, 1, 1), LocalDate.of(2025, 4, 1),
+                            LocalDate.of(2025, 7, 1), LocalDate.of(2025, 10, 1));
+            assertThat(grantDays(half, LocalDate.of(2025, 1, 1), LocalDate.of(2025, 12, 31)))
+                    .containsExactly(LocalDate.of(2025, 1, 1), LocalDate.of(2025, 7, 1));
+        }
+
+        @Test
+        @DisplayName("2개월 간격 — 두 달마다 (예전엔 간격을 무시하고 매월)")
+        void monthlyInterval() {
+            VacationPolicy policy = policyOf(RepeatUnit.MONTHLY, 2, LocalDate.of(2025, 1, 1), null);
+
+            assertThat(grantDays(policy, LocalDate.of(2025, 1, 1), LocalDate.of(2025, 6, 30)))
+                    .containsExactly(LocalDate.of(2025, 1, 1), LocalDate.of(2025, 3, 1), LocalDate.of(2025, 5, 1));
+        }
+
+        @Test
+        @DisplayName("매월 · 31일 · 간격 1 — 달마다 마지막 날로 맞춰 부여된다 (예전과 같다)")
+        void monthlyEndOfMonthUnchanged() {
+            VacationPolicy policy = policyOf(RepeatUnit.MONTHLY, 1, LocalDate.of(2025, 1, 31), 31);
+
+            assertThat(grantDays(policy, LocalDate.of(2025, 1, 1), LocalDate.of(2025, 4, 30)))
+                    .containsExactly(LocalDate.of(2025, 1, 31), LocalDate.of(2025, 2, 28),
+                            LocalDate.of(2025, 3, 31), LocalDate.of(2025, 4, 30));
+        }
+
+        @Test
+        @DisplayName("3일 간격 — 첫 부여일부터 사흘마다 (예전엔 한 번도 부여되지 않았다)")
+        void dailyInterval() {
+            VacationPolicy policy = policyOf(RepeatUnit.DAILY, 3, LocalDate.of(2025, 1, 1), null);
+
+            assertThat(grantDays(policy, LocalDate.of(2025, 1, 1), LocalDate.of(2025, 1, 10)))
+                    .containsExactly(LocalDate.of(2025, 1, 1), LocalDate.of(2025, 1, 4),
+                            LocalDate.of(2025, 1, 7), LocalDate.of(2025, 1, 10));
         }
     }
 

@@ -50,21 +50,23 @@ public interface RoleService {
     Role createRoleWithPermissions(String roleCode, String roleName, String desc, List<String> permissionCodes);
 
     /**
-     * 역할 정보 수정 (설명만)
+     * 역할 정보 수정 (이름 · 설명). null 인 값은 바꾸지 않는다.
      *
      * @param roleCode 역할 코드
-     * @param desc 역할 설명
+     * @param name 역할 이름 (null = 그대로, 빈 글 · 20자 초과 = InvalidValueException)
+     * @param desc 역할 설명 (null = 그대로, 빈 글 = 설명 지움)
      */
-    void updateRole(String roleCode, String desc);
+    void updateRole(String roleCode, String name, String desc);
 
     /**
-     * 역할 정보 수정 (설명 + 권한)
+     * 역할 정보 수정 (이름 · 설명 + 권한). 이름 · 설명 규칙은 {@link #updateRole(String, String, String)} 와 같다.
      *
      * @param roleCode 역할 코드
+     * @param name 역할 이름
      * @param desc 역할 설명
      * @param permissionCodes 권한 코드 리스트
      */
-    void updateRoleWithPermissions(String roleCode, String desc, List<String> permissionCodes);
+    void updateRoleWithPermissions(String roleCode, String name, String desc, List<String> permissionCodes);
 
     /**
      * 역할의 권한만 수정
