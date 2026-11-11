@@ -1,5 +1,7 @@
 package io.groo.ieum.security.service;
 
+import io.groo.core.security.web.IpBlocklist;
+
 import java.util.Set;
 
 /**
@@ -9,7 +11,7 @@ import java.util.Set;
  * - 런타임 동적 추가/제거
  * - CIDR 표기법 지원
  */
-public interface IpBlacklistService {
+public interface IpBlacklistService extends IpBlocklist {
 
     /**
      * IP가 블랙리스트에 있는지 확인

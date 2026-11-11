@@ -4,7 +4,7 @@ import io.groo.ieum.calendar.controller.dto.CalendarApiDto;
 import io.groo.core.controller.ApiResponse;
 import io.groo.core.type.DisplayType;
 import io.groo.ieum.schedule.domain.Schedule;
-import io.groo.ieum.security.annotation.LoginUser;
+import io.groo.core.security.LoginUser;
 import io.groo.ieum.user.domain.User;
 import io.groo.ieum.schedule.service.ScheduleService;
 import io.groo.ieum.vacation.service.VacationService;

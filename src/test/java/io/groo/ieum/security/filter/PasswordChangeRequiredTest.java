@@ -3,7 +3,7 @@ package io.groo.ieum.security.filter;
 import io.groo.ieum.common.config.properties.JwtProperties;
 import io.groo.ieum.security.controller.TokenExchangeController;
 import io.groo.ieum.security.jwt.JwtTokenProvider;
-import io.groo.ieum.security.jwt.SsoJwksKeyLocator;
+import io.groo.core.security.jwt.SsoJwksKeyLocator;
 import io.groo.ieum.security.principal.JwtClaimsPrincipal;
 import io.groo.ieum.security.principal.UserPrincipal;
 import io.groo.ieum.security.service.TokenExchangeService;

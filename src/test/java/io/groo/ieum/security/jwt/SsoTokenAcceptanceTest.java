@@ -1,5 +1,7 @@
 package io.groo.ieum.security.jwt;
 
+import io.groo.core.security.jwt.SsoJwksKeyLocator;
+
 import io.groo.ieum.common.config.properties.JwtProperties;
 import io.jsonwebtoken.JwsHeader;
 import io.jsonwebtoken.Jwts;
@@ -33,7 +35,7 @@ class SsoTokenAcceptanceTest {
         KeyPairGenerator g = KeyPairGenerator.getInstance("RSA");
         g.initialize(2048);
         keyPair = g.generateKeyPair();
-        SsoJwksKeyLocator locator = new SsoJwksKeyLocator(Mockito.mock(JwtProperties.class)) {
+        SsoJwksKeyLocator locator = new SsoJwksKeyLocator("http://unused.invalid/jwks") {
             @Override
             protected Key locate(JwsHeader header) {
                 return keyPair.getPublic();

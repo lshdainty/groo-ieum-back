@@ -4,7 +4,7 @@ import io.groo.core.controller.ApiResponse;
 import io.groo.ieum.common.exception.HrErrorCode;
 import io.groo.core.exception.ForbiddenException;
 import io.groo.core.type.DisplayType;
-import io.groo.ieum.security.annotation.LoginUser;
+import io.groo.core.security.LoginUser;
 import io.groo.ieum.user.domain.User;
 import io.groo.ieum.vacation.controller.dto.VacationApiDto;
 import io.groo.ieum.vacation.controller.dto.VacationPlanApiDto;

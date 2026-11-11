@@ -4,7 +4,7 @@ import io.groo.core.controller.ApiResponse;
 import io.groo.core.type.CountryCode;
 import io.groo.ieum.holiday.controller.dto.HolidayApiDto;
 import io.groo.ieum.holiday.type.HolidayType;
-import io.groo.ieum.security.annotation.LoginUser;
+import io.groo.core.security.LoginUser;
 import io.groo.ieum.user.domain.User;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
