@@ -13,6 +13,7 @@ import io.groo.ieum.department.domain.Department;
 import io.groo.ieum.department.repository.DepartmentRepository;
 import io.groo.ieum.holiday.repository.HolidayRepository;
 import io.groo.ieum.vacation.domain.UserVacationPlan;
+import io.groo.ieum.vacation.domain.VacationApproval;
 import io.groo.ieum.vacation.domain.VacationGrant;
 import io.groo.ieum.vacation.domain.VacationPlan;
 import io.groo.ieum.vacation.domain.VacationPlanPolicy;
@@ -1062,6 +1063,68 @@ class VacationServiceTest {
             assertThat(result.getApprovedCount()).isEqualTo(3);
             assertThat(result.getApprovalRate()).isCloseTo(33.33, org.assertj.core.data.Offset.offset(0.01));
             assertThat(result.getAcquiredVacationTime()).isEqualByComparingTo(new BigDecimal("6.0000"));
+        }
+
+        @Test
+        @DisplayName("결재까지 평균 - 휴가일이 신청보다 훨씬 뒤여도 신청한 때부터 재서 음수가 나오지 않는다")
+        void averageProcessingDaysFromRequestedAt() {
+            String userId = "user1";
+            User user = createTestUser(userId);
+            given(userService.checkUserExist(userId)).willReturn(user);
+            // 11/2 10:00 신청 · 11/3 10:00 승인 · 휴가는 11/20(예전 셈이면 -16일)
+            VacationGrant future = statGrant(user, GrantStatus.ACTIVE, "1.0000");
+            ReflectionTestUtils.setField(future, "requestStartTime", LocalDateTime.of(2025, 11, 20, 9, 0));
+            ReflectionTestUtils.setField(future, "createAt", LocalDateTime.of(2025, 11, 2, 10, 0));
+            approvedAt(future, LocalDateTime.of(2025, 11, 3, 10, 0));
+            // 지난 초과근무를 나중에 신청 — 10/21 근무, 10/25 10:00 신청, 10/28 11:00 반려 (3일)
+            VacationGrant past = statGrant(user, GrantStatus.REJECTED, "1.0000");
+            ReflectionTestUtils.setField(past, "requestStartTime", LocalDateTime.of(2025, 10, 21, 19, 0));
+            ReflectionTestUtils.setField(past, "createAt", LocalDateTime.of(2025, 10, 25, 10, 0));
+            approvedAt(past, LocalDateTime.of(2025, 10, 28, 11, 0));
+            given(vacationGrantRepository.findAllRequestedVacationsByUserIdAndYear(userId, 2025))
+                    .willReturn(List.of(future, past));
+            given(vacationTimeFormatter.format(any(BigDecimal.class))).willReturn("x");
+
+            VacationServiceDto result = vacationService.getRequestedVacationStatsByUserId(userId, 2025);
+
+            assertThat(result.getAverageProcessingDays()).isEqualTo(2.0); // (1 + 3) / 2
+        }
+
+        @Test
+        @DisplayName("결재까지 평균 - 결재 일시가 없거나 결재 전 상태인 건은 뺀다 · 소진 · 만료도 승인을 거쳤으므로 센다")
+        void averageProcessingDaysExcludesUndecided() {
+            String userId = "user1";
+            User user = createTestUser(userId);
+            given(userService.checkUserExist(userId)).willReturn(user);
+            VacationGrant exhausted = statGrant(user, GrantStatus.EXHAUSTED, "1.0000");
+            ReflectionTestUtils.setField(exhausted, "createAt", LocalDateTime.of(2025, 5, 1, 9, 0));
+            approvedAt(exhausted, LocalDateTime.of(2025, 5, 5, 9, 0)); // 4일
+            VacationGrant noApprovalDate = statGrant(user, GrantStatus.ACTIVE, "1.0000"); // 결재 일시 없음
+            ReflectionTestUtils.setField(noApprovalDate, "createAt", LocalDateTime.of(2025, 5, 1, 9, 0));
+            VacationGrant pending = statGrant(user, GrantStatus.PENDING, "1.0000");
+            ReflectionTestUtils.setField(pending, "createAt", LocalDateTime.of(2025, 5, 1, 9, 0));
+            approvedAt(pending, LocalDateTime.of(2025, 5, 30, 9, 0)); // 한 명만 결재, 아직 대기
+            given(vacationGrantRepository.findAllRequestedVacationsByUserIdAndYear(userId, 2025))
+                    .willReturn(List.of(exhausted, noApprovalDate, pending));
+            given(vacationTimeFormatter.format(any(BigDecimal.class))).willReturn("x");
+
+            VacationServiceDto result = vacationService.getRequestedVacationStatsByUserId(userId, 2025);
+
+            assertThat(result.getAverageProcessingDays()).isEqualTo(4.0);
+        }
+
+        @Test
+        @DisplayName("결재까지 평균 - 결재 건이 하나도 없으면 0")
+        void averageProcessingDaysNoneIsZero() {
+            String userId = "user1";
+            User user = createTestUser(userId);
+            given(userService.checkUserExist(userId)).willReturn(user);
+            given(vacationGrantRepository.findAllRequestedVacationsByUserIdAndYear(userId, 2025))
+                    .willReturn(List.of(statGrant(user, GrantStatus.PENDING, "1.0000")));
+            given(vacationTimeFormatter.format(any(BigDecimal.class))).willReturn("x");
+
+            assertThat(vacationService.getRequestedVacationStatsByUserId(userId, 2025).getAverageProcessingDays())
+                    .isEqualTo(0.0);
         }
     }
 
@@ -2140,6 +2203,11 @@ class VacationServiceTest {
                 LocalDate.of(1990, 1, 1), "NONE", "9 ~ 18",
                 LocalDate.now(), YNType.N, null, null, CountryCode.KR
         );
+    }
+
+    private void approvedAt(VacationGrant grant, LocalDateTime at) {
+        VacationApproval approval = VacationApproval.createVacationApproval(grant, grant.getUser(), 1);
+        ReflectionTestUtils.setField(approval, "approvalDate", at);
     }
 
     private VacationGrant statGrant(User user, GrantStatus status, String grantTime) {

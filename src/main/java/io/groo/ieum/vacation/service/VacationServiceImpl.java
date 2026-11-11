@@ -1392,6 +1392,17 @@ public class VacationServiceImpl implements VacationService {
         return status == GrantStatus.ACTIVE || status == GrantStatus.EXHAUSTED || status == GrantStatus.EXPIRED;
     }
 
+    /**
+     * 신청 건의 마지막 결재(승인 · 반려)가 난 일시. 결재 일시가 아직 없으면 빈 값
+     */
+    private static Optional<LocalDateTime> lastApprovalDate(VacationGrant grant) {
+        return grant.getVacationApprovals().stream()
+                .filter(a -> a.getIsDeleted() == YNType.N)
+                .map(VacationApproval::getApprovalDate)
+                .filter(Objects::nonNull)
+                .max(Comparator.naturalOrder());
+    }
+
     @Override
     public VacationServiceDto getRequestedVacationStatsByUserId(String userId, Integer year) {
         // 사용자 존재 확인
@@ -1434,24 +1445,23 @@ public class VacationServiceImpl implements VacationService {
                 .filter(grant -> grant.getStatus() == GrantStatus.PENDING)
                 .count();
 
-        // 5. 평균 처리 기간 (일수) - ACTIVE 또는 REJECTED 상태만 계산
-        List<VacationGrant> processedGrants = allGrants.stream()
-                .filter(grant -> grant.getStatus() == GrantStatus.ACTIVE || grant.getStatus() == GrantStatus.REJECTED)
-                .filter(grant -> grant.getRequestStartTime() != null && grant.getModifyAt() != null)
+        // 5. 평균 처리 기간 (일수) - 신청한 때(createAt) → 마지막 결재가 난 때(approvalDate 최댓값)
+        //    승인을 거친 상태 + 반려만 대상, 결재 일시가 아직 없는 건은 제외
+        List<Duration> processingDurations = allGrants.stream()
+                .filter(grant -> isApprovedStatus(grant.getStatus()) || grant.getStatus() == GrantStatus.REJECTED)
+                .filter(grant -> grant.getCreateAt() != null)
+                .map(grant -> lastApprovalDate(grant)
+                        .map(decidedAt -> Duration.between(grant.getCreateAt(), decidedAt))
+                        .orElse(null))
+                .filter(Objects::nonNull)
                 .toList();
 
         Double averageProcessingDays = 0.0;
-        if (!processedGrants.isEmpty()) {
-            long totalProcessingSeconds = processedGrants.stream()
-                    .mapToLong(grant -> {
-                        Duration duration = Duration.between(
-                                grant.getRequestStartTime(),
-                                grant.getModifyAt()
-                        );
-                        return duration.toDays();
-                    })
+        if (!processingDurations.isEmpty()) {
+            long totalProcessingDays = processingDurations.stream()
+                    .mapToLong(duration -> Math.max(duration.toDays(), 0L))
                     .sum();
-            averageProcessingDays = (double) totalProcessingSeconds / processedGrants.size();
+            averageProcessingDays = (double) totalProcessingDays / processingDurations.size();
         }
 
         // 6. 진행 중 건수
