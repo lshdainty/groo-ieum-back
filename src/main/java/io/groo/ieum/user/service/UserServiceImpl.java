@@ -272,8 +272,10 @@ public class UserServiceImpl implements UserService {
             }
         }
 
+        // 사진 지우기가 오면 새 사진은 보지 않는다(지우기와 바꾸기가 같이 오면 지우기가 이긴다)
+        boolean removeProfile = YNType.isY(data.getProfileDeleteYN());
         UserServiceDto profileDto = UserServiceDto.builder().build();
-        if (StringUtils.hasText(data.getProfileUUID()) && !data.getProfileUUID().equals(user.getProfileUUID())) {
+        if (!removeProfile && StringUtils.hasText(data.getProfileUUID()) && !data.getProfileUUID().equals(user.getProfileUUID())) {
             log.debug("프로필 이미지 변경: uuid={}", data.getProfileUUID());
             profileDto = copyTempProfileToOrigin(data);
         }
@@ -297,6 +299,10 @@ public class UserServiceImpl implements UserService {
                 data.getDashboard(),
                 data.getCountryCode()
         );
+        if (removeProfile) {
+            log.debug("프로필 이미지 삭제: id={}", data.getId());
+            user.removeProfile();
+        }
         log.info("사용자 수정 완료: id={}", data.getId());
     }
 

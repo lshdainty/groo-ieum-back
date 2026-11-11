@@ -164,6 +164,9 @@ public class UserApiDto {
         @Schema(description = "프로필 이미지 UUID")
         private String profileUuid;
 
+        @Schema(description = "프로필 사진 지우기 (Y 면 지금 사진을 지운다 — 함께 온 새 사진은 무시. 없거나 N 이면 그대로)", example = "N")
+        private YNType profileDeleteYn;
+
         @Schema(description = "대시보드 설정")
         private String dashboard;
 

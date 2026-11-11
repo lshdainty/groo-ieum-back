@@ -29,6 +29,8 @@ public class UserServiceDto {
     private String profileName;
     private String profileUrl;
     private String profileUUID;
+    /** 프로필 사진 지우기 (수정 요청 전용 — Y 면 사진을 지운다) */
+    private YNType profileDeleteYN;
     private String dashboard;
 
     // 초대 상태 정보 (SSO에서 조회)
