@@ -137,6 +137,14 @@ public class Role extends AuditingFieldsWithIp {
     }
 
     /**
+     * 역할 설명 지우기<br>
+     * updateRole 은 null 을 "바꾸지 않음"으로 보므로 설명을 비울 때는 이 메소드를 쓴다
+     */
+    public void clearDesc() {
+        this.desc = null;
+    }
+
+    /**
      * 역할 삭제 함수<br>
      * Entity의 경우 Setter 없이 Getter만 사용<br>
      * 해당 메소드를 통해 역할 삭제할 것 (Soft Delete)

@@ -2,6 +2,7 @@ package io.groo.ieum.service;
 
 import io.groo.core.exception.DuplicateException;
 import io.groo.core.exception.EntityNotFoundException;
+import io.groo.core.exception.InvalidValueException;
 import io.groo.ieum.permission.domain.Permission;
 import io.groo.ieum.permission.domain.Role;
 import io.groo.ieum.permission.repository.PermissionRepository;
@@ -213,10 +214,59 @@ class RoleServiceTest {
             given(roleRepository.findByCode(roleCode)).willReturn(Optional.of(role));
 
             // when
-            roleService.updateRole(roleCode, newDesc);
+            roleService.updateRole(roleCode, null, newDesc);
 
             // then
             assertThat(role.getDesc()).isEqualTo(newDesc);
+        }
+
+        @Test
+        @DisplayName("성공 - 이름을 보내면 앞뒤 공백을 걷어 이름이 바뀌고 설명은 그대로다")
+        void updateRoleRename() {
+            Role role = Role.createRole("ADMIN", "관리자", "관리자 역할");
+            given(roleRepository.findByCode("ADMIN")).willReturn(Optional.of(role));
+
+            roleService.updateRole("ADMIN", "  운영 관리자 ", null);
+
+            assertThat(role.getName()).isEqualTo("운영 관리자");
+            assertThat(role.getDesc()).isEqualTo("관리자 역할");
+        }
+
+        @Test
+        @DisplayName("성공 - 설명을 빈 글로 보내면 설명이 지워진다(예전엔 아무 일 없이 성공)")
+        void updateRoleClearDesc() {
+            Role role = Role.createRole("ADMIN", "관리자", "관리자 역할");
+            given(roleRepository.findByCode("ADMIN")).willReturn(Optional.of(role));
+
+            roleService.updateRole("ADMIN", null, "   ");
+
+            assertThat(role.getDesc()).isNull();
+            assertThat(role.getName()).isEqualTo("관리자");
+        }
+
+        @Test
+        @DisplayName("실패 - 이름이 비었으면 InvalidValueException, 값은 그대로다")
+        void updateRoleBlankName() {
+            Role role = Role.createRole("ADMIN", "관리자", "관리자 역할");
+            given(roleRepository.findByCode("ADMIN")).willReturn(Optional.of(role));
+
+            assertThatThrownBy(() -> roleService.updateRole("ADMIN", "  ", "새 설명"))
+                    .isInstanceOf(InvalidValueException.class);
+            assertThat(role.getName()).isEqualTo("관리자");
+            assertThat(role.getDesc()).isEqualTo("관리자 역할");
+        }
+
+        @Test
+        @DisplayName("실패 - 이름이 20자를 넘으면 InvalidValueException (20자는 된다)")
+        void updateRoleNameTooLong() {
+            Role role = Role.createRole("ADMIN", "관리자", "관리자 역할");
+            given(roleRepository.findByCode("ADMIN")).willReturn(Optional.of(role));
+
+            assertThatThrownBy(() -> roleService.updateRole("ADMIN", "가".repeat(21), null))
+                    .isInstanceOf(InvalidValueException.class);
+
+            roleService.updateRole("ADMIN", "가".repeat(20), null);
+            assertThat(role.getName()).isEqualTo("가".repeat(20));
         }
 
         @Test
@@ -227,7 +277,7 @@ class RoleServiceTest {
             given(roleRepository.findByCode(roleCode)).willReturn(Optional.empty());
 
             // when & then
-            assertThatThrownBy(() -> roleService.updateRole(roleCode, "설명"))
+            assertThatThrownBy(() -> roleService.updateRole(roleCode, null, "설명"))
                     .isInstanceOf(EntityNotFoundException.class);
         }
     }
@@ -250,10 +300,24 @@ class RoleServiceTest {
             given(permissionRepository.findByCode("USER:READ")).willReturn(Optional.of(permission));
 
             // when
-            roleService.updateRoleWithPermissions(roleCode, newDesc, permissionCodes);
+            roleService.updateRoleWithPermissions(roleCode, null, newDesc, permissionCodes);
 
             // then
             assertThat(role.getDesc()).isEqualTo(newDesc);
+        }
+
+        @Test
+        @DisplayName("성공 - 권한과 함께 이름을 바꾸고 빈 설명은 지운다")
+        void updateRoleWithPermissionsRenameAndClearDesc() {
+            Role role = Role.createRole("ADMIN", "관리자", "관리자 역할");
+            Permission permission = Permission.createPermission("USER:READ", "사용자 조회", "desc", ResourceType.USER, ActionType.READ);
+            given(roleRepository.findByCodeWithPermissions("ADMIN")).willReturn(Optional.of(role));
+            given(permissionRepository.findByCode("USER:READ")).willReturn(Optional.of(permission));
+
+            roleService.updateRoleWithPermissions("ADMIN", "운영자", "", List.of("USER:READ"));
+
+            assertThat(role.getName()).isEqualTo("운영자");
+            assertThat(role.getDesc()).isNull();
         }
 
         @Test
@@ -266,7 +330,7 @@ class RoleServiceTest {
             given(permissionRepository.findByCode("NONEXISTENT")).willReturn(Optional.empty());
 
             // when & then
-            assertThatThrownBy(() -> roleService.updateRoleWithPermissions(roleCode, "설명", List.of("NONEXISTENT")))
+            assertThatThrownBy(() -> roleService.updateRoleWithPermissions(roleCode, null, "설명", List.of("NONEXISTENT")))
                     .isInstanceOf(EntityNotFoundException.class);
         }
     }

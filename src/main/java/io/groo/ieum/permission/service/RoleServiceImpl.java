@@ -2,6 +2,8 @@ package io.groo.ieum.permission.service;
 
 import io.groo.core.exception.DuplicateException;
 import io.groo.core.exception.EntityNotFoundException;
+import io.groo.core.exception.ErrorCode;
+import io.groo.core.exception.InvalidValueException;
 import io.groo.ieum.common.exception.HrErrorCode;
 import io.groo.ieum.permission.domain.Permission;
 import io.groo.ieum.permission.domain.Role;
@@ -13,6 +15,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -24,6 +27,9 @@ import java.util.stream.Collectors;
 public class RoleServiceImpl implements RoleService {
     private final RoleRepository roleRepository;
     private final PermissionRepository permissionRepository;
+
+    /** 역할 이름 최대 길이 — roles.role_name 칸(length 20) */
+    static final int ROLE_NAME_MAX = 20;
 
     /* ==================== Role 관련 메서드 ==================== */
 
@@ -82,20 +88,20 @@ public class RoleServiceImpl implements RoleService {
 
     @Override
     @Transactional
-    public void updateRole(String roleCode, String desc) {
+    public void updateRole(String roleCode, String name, String desc) {
         log.debug("역할 수정 시작: roleCode={}", roleCode);
         Role role = roleRepository.findByCode(roleCode)
                 .orElseThrow(() -> {
                     log.warn("역할 수정 실패 - 존재하지 않는 역할: roleCode={}", roleCode);
                     return new EntityNotFoundException(HrErrorCode.ROLE_NOT_FOUND);
                 });
-        role.updateRole(null, desc, null);
+        applyNameAndDesc(role, name, desc, null);
         log.info("역할 수정 완료: roleCode={}", roleCode);
     }
 
     @Override
     @Transactional
-    public void updateRoleWithPermissions(String roleCode, String desc, List<String> permissionCodes) {
+    public void updateRoleWithPermissions(String roleCode, String name, String desc, List<String> permissionCodes) {
         log.debug("역할 수정 (권한 포함) 시작: roleCode={}", roleCode);
         Role role = getRole(roleCode);
 
@@ -107,8 +113,29 @@ public class RoleServiceImpl implements RoleService {
                         }))
                 .collect(Collectors.toList());
 
-        role.updateRole(null, desc, permissions);
+        applyNameAndDesc(role, name, desc, permissions);
         log.info("역할 수정 (권한 포함) 완료: roleCode={}", roleCode);
+    }
+
+    /**
+     * 이름 · 설명 · 권한을 반영한다. null 은 "바꾸지 않음"이다.<br>
+     * 이름은 앞뒤 공백을 걷고, 비었거나 {@value #ROLE_NAME_MAX} 자를 넘으면 거절한다(DB 칸 role_name 20).<br>
+     * 설명이 빈 글(공백뿐 포함)이면 설명을 지운다 — 예전에는 빈 설명을 받아도 아무 일 없이 성공했다.
+     */
+    private void applyNameAndDesc(Role role, String name, String desc, List<Permission> permissions) {
+        String trimmedName = null;
+        if (name != null) {
+            trimmedName = name.trim();
+            if (trimmedName.isEmpty() || trimmedName.length() > ROLE_NAME_MAX) {
+                log.warn("역할 수정 실패 - 잘못된 이름: roleCode={}, length={}", role.getCode(), trimmedName.length());
+                throw new InvalidValueException(ErrorCode.INVALID_PARAMETER);
+            }
+        }
+        boolean clearDesc = desc != null && !StringUtils.hasText(desc);
+        role.updateRole(trimmedName, clearDesc ? null : desc, permissions);
+        if (clearDesc) {
+            role.clearDesc();
+        }
     }
 
     @Override
