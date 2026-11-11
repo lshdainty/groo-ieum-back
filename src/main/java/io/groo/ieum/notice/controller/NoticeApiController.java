@@ -57,8 +57,19 @@ public class NoticeApiController implements NoticeApi {
     @PreAuthorize("hasAuthority('NOTICE:READ')")
     public ApiResponse searchNotice(Long noticeId) {
         NoticeServiceDto notice = noticeService.searchNoticeAndIncreaseViewCount(noticeId);
+        return ApiResponse.success(toSearchNoticeResp(notice));
+    }
 
-        return ApiResponse.success(new NoticeApiDto.SearchNoticeResp(
+    /** 수정 화면용 — 본문까지 주되 조회수는 올리지 않는다(관리자가 고칠 때마다 조회가 쌓이지 않게) */
+    @Override
+    @PreAuthorize("hasAuthority('NOTICE:MANAGE')")
+    public ApiResponse searchNoticeForManage(Long noticeId) {
+        NoticeServiceDto notice = noticeService.searchNotice(noticeId);
+        return ApiResponse.success(toSearchNoticeResp(notice));
+    }
+
+    private NoticeApiDto.SearchNoticeResp toSearchNoticeResp(NoticeServiceDto notice) {
+        return new NoticeApiDto.SearchNoticeResp(
                 notice.getId(),
                 notice.getWriterId(),
                 notice.getWriterName(),
@@ -72,7 +83,7 @@ public class NoticeApiController implements NoticeApi {
                 notice.getEndDate(),
                 notice.getCreateDate(),
                 notice.getModifyDate()
-        ));
+        );
     }
 
     @Override

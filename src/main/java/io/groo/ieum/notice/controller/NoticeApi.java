@@ -75,6 +75,31 @@ public interface NoticeApi {
     );
 
     @Operation(
+            summary = "공지사항 관리용 상세 조회",
+            description = "공지 수정 화면이 본문까지 채울 수 있게 상세 정보를 조회합니다. 조회수는 올리지 않습니다. 관리자 권한이 필요합니다."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "공지사항 조회 성공",
+                    content = @Content(schema = @Schema(implementation = NoticeApiDto.SearchNoticeResp.class))
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "403",
+                    description = "권한 없음 (NOTICE:MANAGE 필요)"
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404",
+                    description = "공지사항을 찾을 수 없음"
+            )
+    })
+    @GetMapping("/api/v1/notice/{id}/manage")
+    ApiResponse searchNoticeForManage(
+            @Parameter(description = "공지사항 ID", example = "1", required = true)
+            @PathVariable("id") Long noticeId
+    );
+
+    @Operation(
             summary = "공지사항 목록 조회",
             description = "공지사항 목록을 페이지네이션하여 조회합니다. 고정 공지가 먼저 표시됩니다."
     )
