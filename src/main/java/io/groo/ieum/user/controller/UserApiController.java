@@ -5,7 +5,7 @@ import io.groo.core.audit.AuditAccess;
 import io.groo.core.exception.ForbiddenException;
 import io.groo.core.type.YNType;
 import io.groo.ieum.common.exception.HrErrorCode;
-import io.groo.ieum.security.annotation.LoginUser;
+import io.groo.core.security.LoginUser;
 import io.groo.ieum.user.controller.dto.UserApiDto;
 import io.groo.core.controller.ApiResponse;
 import io.groo.ieum.user.domain.User;

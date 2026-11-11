@@ -8,7 +8,7 @@ import io.groo.ieum.schedule.controller.dto.ScheduleApiDto;
 import io.groo.ieum.schedule.domain.Schedule;
 import io.groo.ieum.schedule.service.ScheduleService;
 import io.groo.ieum.schedule.service.dto.ScheduleServiceDto;
-import io.groo.ieum.security.annotation.LoginUser;
+import io.groo.core.security.LoginUser;
 import io.groo.ieum.user.domain.User;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;

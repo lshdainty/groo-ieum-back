@@ -1,7 +1,7 @@
 package io.groo.ieum.work.controller;
 
 import io.groo.core.controller.ApiResponse;
-import io.groo.ieum.security.annotation.LoginUser;
+import io.groo.core.security.LoginUser;
 import io.groo.ieum.user.domain.User;
 import io.groo.ieum.work.controller.dto.WorkApiDto;
 import io.groo.ieum.work.repository.dto.WorkHistorySearchCondition;

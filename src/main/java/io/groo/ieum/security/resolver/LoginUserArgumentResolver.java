@@ -1,55 +1,24 @@
 package io.groo.ieum.security.resolver;
 
-import io.groo.core.exception.ErrorCode;
-import io.groo.core.exception.UnauthorizedException;
-import io.groo.ieum.security.annotation.LoginUser;
+import io.groo.core.security.web.AbstractLoginUserArgumentResolver;
 import io.groo.ieum.security.principal.UserPrincipal;
 import io.groo.ieum.user.domain.User;
-import lombok.RequiredArgsConstructor;
-import org.springframework.core.MethodParameter;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
-import org.springframework.web.bind.support.WebDataBinderFactory;
-import org.springframework.web.context.request.NativeWebRequest;
-import org.springframework.web.method.support.HandlerMethodArgumentResolver;
-import org.springframework.web.method.support.ModelAndViewContainer;
 
-@RequiredArgsConstructor
+/**
+ * {@code @LoginUser User} 를 채운다 — 공통 판단(인증 없음·익명이면 401)은 core 뼈대, 이음은 주체에서 {@link User} 를
+ * 꺼내는 법만 정한다(core 3.2.0).
+ */
 @Component
-public class LoginUserArgumentResolver implements HandlerMethodArgumentResolver {
+public class LoginUserArgumentResolver extends AbstractLoginUserArgumentResolver<User> {
 
-    /**
-     * 파라미터에 @LoginUser 어노테이션이 붙어 있고, 파라미터 클래스 타입이 User인 경우 true를 반환한다.
-     */
-    @Override
-    public boolean supportsParameter(MethodParameter parameter) {
-        boolean isLoginUserAnnotation = parameter.getParameterAnnotation(LoginUser.class) != null;
-        boolean isUserClass = User.class.equals(parameter.getParameterType());
-
-        return isLoginUserAnnotation && isUserClass;
+    public LoginUserArgumentResolver() {
+        super(User.class);
     }
 
-    /**
-     * 파라미터에 전달할 객체를 생성한다.
-     * Spring Security의 SecurityContextHolder에서 로그인한 사용자 정보를 가져온다.
-     */
     @Override
-    public Object resolveArgument(MethodParameter parameter, ModelAndViewContainer mavContainer,
-                                  NativeWebRequest webRequest, WebDataBinderFactory binderFactory) throws Exception {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-
-        if (authentication == null || !authentication.isAuthenticated() ||
-                "anonymousUser".equals(authentication.getPrincipal())) {
-            throw new UnauthorizedException(ErrorCode.UNAUTHORIZED);
-        }
-
-        Object principal = authentication.getPrincipal();
-        if (!(principal instanceof UserPrincipal)) {
-            throw new UnauthorizedException(ErrorCode.UNAUTHORIZED);
-        }
-
-        UserPrincipal userPrincipal = (UserPrincipal) principal;
-        return userPrincipal.getUser();
+    protected User toLoginUser(Authentication authentication) {
+        return authentication.getPrincipal() instanceof UserPrincipal principal ? principal.getUser() : null;
     }
 }

@@ -1,5 +1,7 @@
 package io.groo.ieum.common.config.web;
 
+import io.groo.core.security.web.RedisRateLimitInterceptor;
+import io.groo.core.security.web.SecurityErrorResponder;
 import io.groo.ieum.common.config.security.RequestResponseLoggingFilter;
 import io.groo.ieum.security.resolver.LoginUserArgumentResolver;
 import lombok.RequiredArgsConstructor;
@@ -14,6 +16,7 @@ import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 import org.springframework.web.servlet.i18n.LocaleChangeInterceptor;
 
+import java.time.Duration;
 import java.util.List;
 
 @Configuration
@@ -23,6 +26,7 @@ public class WebConfig implements WebMvcConfigurer {
     private final RequestResponseLoggingFilter requestResponseLoggingFilter;
     private final LocaleChangeInterceptor localeChangeInterceptor;
     private final org.springframework.data.redis.core.StringRedisTemplate stringRedisTemplate;
+    private final SecurityErrorResponder securityErrorResponder;
 
     @Value("${file.resource-handler}")
     private String resourceHandler;
@@ -46,10 +50,10 @@ public class WebConfig implements WebMvcConfigurer {
         registry.addInterceptor(localeChangeInterceptor);
 
         // 로그인(인가코드 교환): 분당 60/IP — 로그인 1회당 1요청이라 NAT 뒤 여러 명이 몰려도 여유가 있다
-        registry.addInterceptor(new RateLimitInterceptor(stringRedisTemplate, "login", 60))
+        registry.addInterceptor(new RedisRateLimitInterceptor(stringRedisTemplate, securityErrorResponder, "ieum:rate:login", 60, Duration.ofMinutes(1), false))
                 .addPathPatterns("/api/v1/auth/exchange-code");
         // 메일 발송 · 비밀번호 계열: 분당 20/IP — 정상 사용은 사람이 누르는 횟수
-        registry.addInterceptor(new RateLimitInterceptor(stringRedisTemplate, "sensitive", 20))
+        registry.addInterceptor(new RedisRateLimitInterceptor(stringRedisTemplate, securityErrorResponder, "ieum:rate:sensitive", 20, Duration.ofMinutes(1), false))
                 .addPathPatterns("/api/v1/users/*/invitations/resend",
                         "/api/v1/users/me/password",
                         "/api/v1/users/*/password");

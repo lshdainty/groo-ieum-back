@@ -1,5 +1,7 @@
 package io.groo.ieum.security.jwt;
 
+import io.groo.core.security.jwt.SsoJwksKeyLocator;
+
 import io.groo.ieum.common.config.properties.JwtProperties;
 import io.groo.ieum.user.domain.User;
 import io.jsonwebtoken.Claims;

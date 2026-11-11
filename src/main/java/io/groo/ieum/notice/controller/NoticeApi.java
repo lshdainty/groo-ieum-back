@@ -3,7 +3,7 @@ package io.groo.ieum.notice.controller;
 import io.groo.core.controller.ApiResponse;
 import io.groo.ieum.notice.controller.dto.NoticeApiDto;
 import io.groo.ieum.notice.type.NoticeType;
-import io.groo.ieum.security.annotation.LoginUser;
+import io.groo.core.security.LoginUser;
 import io.groo.ieum.user.domain.User;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;

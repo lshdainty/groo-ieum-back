@@ -1,7 +1,7 @@
 package io.groo.ieum.user.controller;
 
 import io.groo.core.controller.ApiResponse;
-import io.groo.ieum.security.annotation.LoginUser;
+import io.groo.core.security.LoginUser;
 import io.groo.ieum.user.controller.dto.UserApiDto;
 import io.groo.ieum.user.domain.User;
 import io.swagger.v3.oas.annotations.Operation;

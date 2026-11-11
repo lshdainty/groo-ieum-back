@@ -1,11 +1,15 @@
 package io.groo.ieum.common.config.security;
 
+import io.groo.core.security.web.IpBlockFilter;
+import io.groo.core.security.web.JsonAccessDeniedHandler;
+import io.groo.core.security.web.JsonAuthenticationEntryPoint;
+import io.groo.core.security.web.MaliciousPathBlockFilter;
+import io.groo.core.security.web.OriginCheckFilter;
+import io.groo.core.security.web.PrometheusAccessFilter;
+import io.groo.core.security.web.SecurityErrorResponder;
 import io.groo.ieum.common.config.properties.AppProperties;
-import io.groo.ieum.security.filter.IpBlockFilter;
 import io.groo.ieum.security.filter.JwtAuthenticationFilter;
-import io.groo.ieum.security.filter.OriginCheckFilter;
-import io.groo.ieum.security.filter.PrometheusAccessFilter;
-import io.groo.ieum.security.handler.CustomAuthenticationEntryPoint;
+import io.groo.ieum.security.service.IpBlacklistService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -32,12 +36,15 @@ import java.util.List;
 @EnableMethodSecurity
 public class SecurityConfig {
 
+    /** 이음 로그인 쿠키 — 이 쿠키가 실린 상태 변경 요청만 오리진을 검사한다. */
+    static final String ACCESS_TOKEN_COOKIE = "hr_access_token";
+
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
-    private final CustomAuthenticationEntryPoint customAuthenticationEntryPoint;
+    private final JsonAuthenticationEntryPoint authenticationEntryPoint;
+    private final JsonAccessDeniedHandler accessDeniedHandler;
+    private final SecurityErrorResponder securityErrorResponder;
+    private final IpBlacklistService ipBlacklistService;
     private final AppProperties appProperties;
-    private final IpBlockFilter ipBlockFilter;
-    private final OriginCheckFilter originCheckFilter;
-    private final PrometheusAccessFilter prometheusAccessFilter;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -78,16 +85,17 @@ public class SecurityConfig {
 
         // 인증 실패 처리
         http.exceptionHandling(exception -> exception
-                .authenticationEntryPoint(customAuthenticationEntryPoint)
+                .authenticationEntryPoint(authenticationEntryPoint)
+                .accessDeniedHandler(accessDeniedHandler)
         );
 
-        // 필터 순서 설정
-        // IP 블랙리스트 필터 → JWT 인증 필터 → 기타 필터
-        http.addFilterBefore(ipBlockFilter, UsernamePasswordAuthenticationFilter.class);
-        // /actuator/prometheus 는 프록시를 거친 요청이면 403 (P-1)
-        http.addFilterBefore(prometheusAccessFilter, UsernamePasswordAuthenticationFilter.class);
-        // 쿠키 인증 + 상태 변경 요청은 Origin(없으면 Referer)이 허용 오리진인지 본다(S-5)
-        http.addFilterBefore(originCheckFilter, UsernamePasswordAuthenticationFilter.class);
+        // 보호 장치(core 3.2.0). 필터는 빈이 아니라 여기서 만든다 — 빈이면 서블릿 필터로도 한 번 더 등록된다.
+        // 순서: 스캐너 경로 → 차단 IP → 지표 접근(P-1) → 오리진(S-5, 쿠키 인증의 CSRF 방어) → JWT
+        http.addFilterBefore(new MaliciousPathBlockFilter(securityErrorResponder), UsernamePasswordAuthenticationFilter.class);
+        http.addFilterBefore(new IpBlockFilter(ipBlacklistService, securityErrorResponder), UsernamePasswordAuthenticationFilter.class);
+        http.addFilterBefore(new PrometheusAccessFilter(securityErrorResponder), UsernamePasswordAuthenticationFilter.class);
+        http.addFilterBefore(new OriginCheckFilter(appProperties.getFrontend().allowedOrigins(), ACCESS_TOKEN_COOKIE,
+                securityErrorResponder), UsernamePasswordAuthenticationFilter.class);
         http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();

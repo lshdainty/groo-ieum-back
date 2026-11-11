@@ -2,7 +2,7 @@ package io.groo.ieum.schedule.controller;
 
 import io.groo.core.controller.ApiResponse;
 import io.groo.ieum.schedule.controller.dto.ScheduleApiDto;
-import io.groo.ieum.security.annotation.LoginUser;
+import io.groo.core.security.LoginUser;
 import io.groo.ieum.user.domain.User;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
