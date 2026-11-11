@@ -12,10 +12,12 @@ import java.time.LocalDateTime;
  * 한국어 반복 부여 정책 설명 생성기
  * 예시:
  * - "매년 1월 1일 부여"
- * - "2년 간격으로 매년 1월 1일 부여"
- * - "매월 15일 부여"
- * - "분기마다 1일 부여"
- * - "반기마다 부여"
+ * - "2년마다 1월 1일 부여"
+ * - "매월 15일 부여" · "2개월마다 1일 부여"
+ * - "분기마다 1일 부여" · "2분기마다 1일 부여"
+ * - "반기마다 부여" · "3일마다 부여"
+ * 간격이 2 이상이면 "{N}{단위}마다" 하나로 말한다 — "2분기 간격으로 분기마다" 처럼 단위를 두 번 말하지 않는다.
+ * 간격은 첫 부여일이 든 주기부터 센다(RepeatGrant.calculateNextGrantDate) — 글은 그 계산의 "N 주기마다" 와 같다.
  */
 @Component
 public class KoreanRepeatGrantDescriptionGenerator implements RepeatGrantDescriptionGenerator {
@@ -35,17 +37,16 @@ public class KoreanRepeatGrantDescriptionGenerator implements RepeatGrantDescrip
 
         StringBuilder description = new StringBuilder();
 
-        // 1. 반복 간격 (2년 이상일 경우만 표시)
-        if (repeatInterval != null && repeatInterval > 1) {
-            description.append(repeatInterval).append(getRepeatUnitSuffix(repeatUnit)).append(" 간격으로 ");
-        }
-
-        // 2. 반복 단위 (매년, 매월, 매일, 분기, 반기)
+        // 1. 반복 주기 — 간격 1 은 단위 이름(매년 · 매월 · 분기마다 · 반기마다 · 매일), 2 이상은 "{N}{단위}마다"(2년마다 · 2분기마다 · 3일마다)
         if (repeatUnit != null) {
-            description.append(getRepeatUnitName(repeatUnit));
+            if (repeatInterval != null && repeatInterval > 1) {
+                description.append(repeatInterval).append(getRepeatUnitSuffix(repeatUnit)).append("마다");
+            } else {
+                description.append(getRepeatUnitName(repeatUnit));
+            }
         }
 
-        // 3. 특정 월/일 (반복 단위에 따라)
+        // 2. 특정 월/일 (반복 단위에 따라)
         switch (repeatUnit) {
             case YEARLY:
                 if (specificMonths != null) {
@@ -73,10 +74,10 @@ public class KoreanRepeatGrantDescriptionGenerator implements RepeatGrantDescrip
                 break;
         }
 
-        // 4. "부여" 추가
+        // 3. "부여" 추가
         description.append(" 부여");
 
-        // 5. 1회성 부여 여부
+        // 4. 1회성 부여 여부
         if (YNType.isN(isRecurring) && maxGrantCount != null) {
             LocalDateTime firstGrantDate = policy.getFirstGrantDate();
             if (firstGrantDate != null && repeatUnit == RepeatUnit.YEARLY && repeatInterval != null) {
