@@ -31,7 +31,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -236,11 +236,13 @@ class RequestResponseLoggingFilterTest {
             request.setContent(body.getBytes(StandardCharsets.UTF_8));
             MockHttpServletResponse response = new MockHttpServletResponse();
 
-            assertThatThrownBy(() -> exploding.doFilter(request, response,
+            // core 3.1.0 공통 뼈대는 로깅 실패(Error 포함)를 삼키고 요청을 정상 통과시킨다 — 로깅은 부가 기능이라
+            // 실패해도 응답이 사고가 되면 안 된다. 예전 이음 판은 Error 를 밖으로 던졌다(응답은 지켰지만 500 으로 바뀌었다).
+            assertThatCode(() -> exploding.doFilter(request, response,
                     (req, res) -> res.getWriter().write(body)))
-                    .isInstanceOf(StackOverflowError.class);
+                    .doesNotThrowAnyException();
 
-            // Error 가 새어 나가더라도 그 전에 copyBodyToResponse() 는 돌아야 한다.
+            // 응답 본문은 그대로 나가야 한다(copyBodyToResponse 가 돌았다).
             assertThat(response.getContentAsString()).isEqualTo(body);
         }
 
