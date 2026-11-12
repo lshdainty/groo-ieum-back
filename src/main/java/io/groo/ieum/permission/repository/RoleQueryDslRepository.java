@@ -61,8 +61,9 @@ public class RoleQueryDslRepository implements RoleRepository {
                 .leftJoin(rolePermission.permission, permission).fetchJoin()
                 .where(
                         role.code.eq(code),
-                        role.isDeleted.eq(YNType.N),
-                        rolePermission.isDeleted.eq(YNType.N).or(rolePermission.isNull())
+                        // 권한 매핑의 삭제 여부로 거르지 않는다 — 매핑이 전부 지워진 역할(권한 0개)까지 행째 사라졌다.
+                        // 지운 매핑 · 지운 권한은 Role.getPermissions() 가 뺀다(보안 점검 IEU-5)
+                        role.isDeleted.eq(YNType.N)
                 )
                 .fetchOne();
 
@@ -81,8 +82,9 @@ public class RoleQueryDslRepository implements RoleRepository {
                 .leftJoin(role.rolePermissions, rolePermission).fetchJoin()
                 .leftJoin(rolePermission.permission, permission).fetchJoin()
                 .where(
-                        role.isDeleted.eq(YNType.N),
-                        rolePermission.isDeleted.eq(YNType.N).or(rolePermission.isNull())
+                        // 권한 매핑의 삭제 여부로 거르지 않는다 — 매핑이 전부 지워진 역할(권한 0개)까지 행째 사라졌다.
+                        // 지운 매핑 · 지운 권한은 Role.getPermissions() 가 뺀다(보안 점검 IEU-5)
+                        role.isDeleted.eq(YNType.N)
                 )
                 .orderBy(role.code.asc())
                 .fetch();

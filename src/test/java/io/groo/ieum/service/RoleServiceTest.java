@@ -298,7 +298,7 @@ class RoleServiceTest {
         @DisplayName("성공 - 권한과 함께 역할이 수정된다")
         void updateRoleWithPermissionsSuccess() {
             // given
-            String roleCode = "ADMIN";
+            String roleCode = "MANAGER";
             String newDesc = "수정된 설명";
             List<String> permissionCodes = List.of("USER:READ");
 
@@ -318,12 +318,12 @@ class RoleServiceTest {
         @Test
         @DisplayName("성공 - 권한과 함께 이름을 바꾸고 빈 설명은 지운다")
         void updateRoleWithPermissionsRenameAndClearDesc() {
-            Role role = Role.createRole("ADMIN", "관리자", "관리자 역할");
+            Role role = Role.createRole("MANAGER", "관리자", "관리자 역할");
             Permission permission = Permission.createPermission("USER:READ", "사용자 조회", "desc", ResourceType.USER, ActionType.READ);
-            given(roleRepository.findByCodeWithPermissions("ADMIN")).willReturn(Optional.of(role));
+            given(roleRepository.findByCodeWithPermissions("MANAGER")).willReturn(Optional.of(role));
             given(permissionRepository.findByCode("USER:READ")).willReturn(Optional.of(permission));
 
-            roleService.updateRoleWithPermissions("ADMIN", "운영자", "", List.of("USER:READ"));
+            roleService.updateRoleWithPermissions("MANAGER", "운영자", "", List.of("USER:READ"));
 
             assertThat(role.getName()).isEqualTo("운영자");
             assertThat(role.getDesc()).isNull();
@@ -333,7 +333,7 @@ class RoleServiceTest {
         @DisplayName("실패 - 존재하지 않는 권한이면 예외가 발생한다")
         void updateRoleWithPermissionsFailPermissionNotFound() {
             // given
-            String roleCode = "ADMIN";
+            String roleCode = "MANAGER";
             Role role = Role.createRole(roleCode, "관리자", "관리자 역할");
             given(roleRepository.findByCodeWithPermissions(roleCode)).willReturn(Optional.of(role));
             given(permissionRepository.findByCode("NONEXISTENT")).willReturn(Optional.empty());
@@ -351,7 +351,7 @@ class RoleServiceTest {
         @DisplayName("성공 - 역할의 권한이 수정된다")
         void updateRolePermissionsSuccess() {
             // given
-            String roleCode = "ADMIN";
+            String roleCode = "MANAGER";
             List<String> permissionCodes = List.of("USER:READ", "USER:EDIT");
 
             Role role = Role.createRole(roleCode, "관리자", "관리자 역할");
@@ -373,7 +373,7 @@ class RoleServiceTest {
         @DisplayName("실패 - 존재하지 않는 권한이면 예외가 발생한다")
         void updateRolePermissionsFailPermissionNotFound() {
             // given
-            String roleCode = "ADMIN";
+            String roleCode = "MANAGER";
             Role role = Role.createRole(roleCode, "관리자", "관리자 역할");
             given(roleRepository.findByCodeWithPermissions(roleCode)).willReturn(Optional.of(role));
             given(permissionRepository.findByCode("NONEXISTENT")).willReturn(Optional.empty());
@@ -391,7 +391,7 @@ class RoleServiceTest {
         @DisplayName("성공 - 역할에 권한이 추가된다")
         void addPermissionToRoleSuccess() {
             // given
-            String roleCode = "ADMIN";
+            String roleCode = "MANAGER";
             String permissionCode = "USER:READ";
 
             Role role = Role.createRole(roleCode, "관리자", "관리자 역할");
@@ -411,7 +411,7 @@ class RoleServiceTest {
         @DisplayName("실패 - 존재하지 않는 권한이면 예외가 발생한다")
         void addPermissionToRoleFailPermissionNotFound() {
             // given
-            String roleCode = "ADMIN";
+            String roleCode = "MANAGER";
             Role role = Role.createRole(roleCode, "관리자", "관리자 역할");
             given(roleRepository.findByCodeWithPermissions(roleCode)).willReturn(Optional.of(role));
             given(permissionRepository.findByCode("NONEXISTENT")).willReturn(Optional.empty());
@@ -429,7 +429,7 @@ class RoleServiceTest {
         @DisplayName("성공 - 역할에서 권한이 제거된다")
         void removePermissionFromRoleSuccess() {
             // given
-            String roleCode = "ADMIN";
+            String roleCode = "MANAGER";
             String permissionCode = "USER:READ";
 
             Permission permission = Permission.createPermission(permissionCode, "사용자 조회", "desc", ResourceType.USER, ActionType.READ);
@@ -449,7 +449,7 @@ class RoleServiceTest {
         @DisplayName("실패 - 존재하지 않는 권한이면 예외가 발생한다")
         void removePermissionFromRoleFailPermissionNotFound() {
             // given
-            String roleCode = "ADMIN";
+            String roleCode = "MANAGER";
             Role role = Role.createRole(roleCode, "관리자", "관리자 역할");
             given(roleRepository.findByCodeWithPermissions(roleCode)).willReturn(Optional.of(role));
             given(permissionRepository.findByCode("NONEXISTENT")).willReturn(Optional.empty());
@@ -467,7 +467,7 @@ class RoleServiceTest {
         @DisplayName("성공 - 역할이 삭제된다")
         void deleteRoleSuccess() {
             // given
-            String roleCode = "ADMIN";
+            String roleCode = "MANAGER";
             Role role = Role.createRole(roleCode, "관리자", "관리자 역할");
             given(roleRepository.findByCode(roleCode)).willReturn(Optional.of(role));
 
@@ -772,5 +772,53 @@ class RoleServiceTest {
         return User.createUser(1L, id, id, id + "@test.com",
                 LocalDate.of(1990, 1, 1), "NONE", "9 ~ 18", LocalDate.now(),
                 io.groo.core.type.YNType.N, null, null, CountryCode.KR);
+    }
+
+    @Nested
+    @DisplayName("보안 점검 IEU-5 - 시스템 필수 역할 · 권한 보호")
+    class SystemRoleProtection {
+        private void assertProtected(org.assertj.core.api.ThrowableAssert.ThrowingCallable call) {
+            assertThatThrownBy(call)
+                    .isInstanceOf(io.groo.core.exception.BusinessRuleViolationException.class)
+                    .extracting(e -> ((io.groo.core.exception.BusinessRuleViolationException) e).getErrorCode().getCode())
+                    .isEqualTo("PERMISSION_006");
+        }
+
+        @Test
+        @DisplayName("ADMIN 역할은 지울 수 없다 — 조회 · 회수도 하지 않는다")
+        void cannotDeleteAdminRole() {
+            assertProtected(() -> roleService.deleteRole("ADMIN"));
+            then(roleRepository).shouldHaveNoInteractions();
+            then(tokenRevocationService).shouldHaveNoInteractions();
+        }
+
+        @Test
+        @DisplayName("ROLE:MANAGE 권한은 지울 수 없다")
+        void cannotDeleteRoleManagePermission() {
+            assertProtected(() -> roleService.deletePermission("ROLE:MANAGE"));
+            then(permissionRepository).shouldHaveNoInteractions();
+        }
+
+        @Test
+        @DisplayName("ADMIN 역할에서 ROLE:MANAGE 를 빼는 수정 세 경로를 모두 거절한다")
+        void adminMustKeepRoleManage() {
+            assertProtected(() -> roleService.removePermissionFromRole("ADMIN", "ROLE:MANAGE"));
+            assertProtected(() -> roleService.updateRolePermissions("ADMIN", List.of("USER:READ")));
+            assertProtected(() -> roleService.updateRoleWithPermissions("ADMIN", "관리자", null, List.of()));
+            then(roleRepository).shouldHaveNoInteractions();
+        }
+
+        @Test
+        @DisplayName("ADMIN 역할의 권한 목록을 바꿔도 ROLE:MANAGE 가 남아 있으면 된다")
+        void adminKeepsRoleManageOk() {
+            Permission manage = Permission.createPermission("ROLE:MANAGE", "역할 관리", null, ResourceType.ROLE, ActionType.MANAGE);
+            Role admin = Role.createRoleWithPermissions("ADMIN", "관리자", null, List.of(manage));
+            given(roleRepository.findByCodeWithPermissions("ADMIN")).willReturn(Optional.of(admin));
+            given(permissionRepository.findByCode("ROLE:MANAGE")).willReturn(Optional.of(manage));
+
+            roleService.updateRolePermissions("ADMIN", List.of("ROLE:MANAGE"));
+
+            assertThat(admin.hasPermission("ROLE:MANAGE")).isTrue();
+        }
     }
 }

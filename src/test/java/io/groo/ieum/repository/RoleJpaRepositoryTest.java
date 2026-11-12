@@ -273,4 +273,26 @@ class RoleJpaRepositoryTest {
         assertThat(grants).hasSize(1);
         assertThat(grants.get(0).getUser().getId()).isEqualTo("u1");
     }
+
+    @Test
+    @DisplayName("보안 점검 IEU-5 - 마지막 권한이 빠진 역할도 목록 · 코드 조회에 남는다(권한 0개)")
+    void roleWithAllPermissionsRemovedStaysListed() {
+        // given
+        Permission read = Permission.createPermission("USER:READ", "사용자 조회", null, ResourceType.USER, ActionType.READ);
+        em.persist(read);
+        Role role = Role.createRoleWithPermissions("HR", "인사", null, List.of(read));
+        em.persist(role);
+        role.removePermission(read);
+        em.flush();
+        em.clear();
+
+        // when
+        List<Role> all = roleRepository.findAllRolesWithPermissions();
+        Optional<Role> byCode = roleRepository.findByCodeWithPermissions("HR");
+
+        // then
+        assertThat(all).extracting(Role::getCode).contains("HR");
+        assertThat(byCode).isPresent();
+        assertThat(byCode.get().getPermissions()).isEmpty();
+    }
 }
