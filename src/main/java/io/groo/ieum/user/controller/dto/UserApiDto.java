@@ -413,10 +413,10 @@ public class UserApiDto {
         @Schema(description = "SSO 사용자 번호", example = "1")
         private Long ssoUserRowId;
 
-        @Schema(description = "사용자 ID", example = "hong")
+        @Schema(description = "사용자 ID — 이음 밖에서 만들어진 기존 SSO 계정과 연결된 경우 비운다", example = "hong")
         private String userId;
 
-        @Schema(description = "사용자 이름", example = "홍길동")
+        @Schema(description = "사용자 이름 — 이음 밖에서 만들어진 기존 SSO 계정과 연결된 경우 비운다", example = "홍길동")
         private String userName;
 
         @Schema(description = "사용자 이메일", example = "hong@example.com")

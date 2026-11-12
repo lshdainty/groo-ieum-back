@@ -183,6 +183,82 @@ class UserServiceTest {
     }
 
     @Nested
+    @DisplayName("보안 점검 IEU-1 - 이음 사용자만 대상으로 삼는다")
+    class IeumUserOnly {
+        private io.groo.ieum.client.sso.dto.SsoInviteResponse existingSsoAccount() {
+            io.groo.ieum.client.sso.dto.SsoInviteResponse resp = new io.groo.ieum.client.sso.dto.SsoInviteResponse();
+            ReflectionTestUtils.setField(resp, "alreadyExists", true);
+            ReflectionTestUtils.setField(resp, "userNo", 500L);
+            ReflectionTestUtils.setField(resp, "userId", "damda_only_kim");
+            ReflectionTestUtils.setField(resp, "name", "김담다");
+            ReflectionTestUtils.setField(resp, "email", "kim@other.com");
+            return resp;
+        }
+
+        @Test
+        @DisplayName("실패 - 이음에 없는 계정(담다 전용 · SSO 관리자)의 비밀번호는 초기화하지 않고 SSO 도 부르지 않는다")
+        void resetPasswordRejectsNonIeumUser() {
+            given(userRepository.findById("sso_admin")).willReturn(Optional.empty());
+
+            assertThatThrownBy(() -> userService.resetPassword("sso_admin"))
+                    .isInstanceOf(EntityNotFoundException.class);
+            then(ssoApiClient).shouldHaveNoInteractions();
+        }
+
+        @Test
+        @DisplayName("실패 - 삭제(퇴사)된 이음 사용자의 비밀번호도 초기화하지 않는다")
+        void resetPasswordRejectsDeletedUser() {
+            User user = createTestUser("left1", "퇴사자", "left1@test.com");
+            ReflectionTestUtils.setField(user, "ssoUserRowId", 3L);
+            user.deleteUser();
+            given(userRepository.findById("left1")).willReturn(Optional.of(user));
+
+            assertThatThrownBy(() -> userService.resetPassword("left1"))
+                    .isInstanceOf(EntityNotFoundException.class);
+            then(ssoApiClient).shouldHaveNoInteractions();
+        }
+
+        @Test
+        @DisplayName("실패 - 내부 계정(SYSTEM 소속)의 비밀번호는 초기화하지 않는다")
+        void resetPasswordRejectsSystemAccount() {
+            User user = User.createUser(9L, "system", "시스템", "system@test.com",
+                    LocalDate.of(1990, 1, 1), "SYSTEM", "9 ~ 18", LocalDate.now(), YNType.N, null, null, CountryCode.KR);
+            given(userRepository.findById("system")).willReturn(Optional.of(user));
+
+            assertThatThrownBy(() -> userService.resetPassword("system"))
+                    .isInstanceOf(EntityNotFoundException.class);
+            then(ssoApiClient).shouldHaveNoInteractions();
+        }
+
+        @Test
+        @DisplayName("성공 - SSO 와 연결된 이음 사용자면 SSO 에 초기화를 맡긴다")
+        void resetPasswordForIeumUser() {
+            User user = createTestUser("user1", "이서준", "user1@test.com");
+            ReflectionTestUtils.setField(user, "ssoUserRowId", 7L);
+            given(userRepository.findById("user1")).willReturn(Optional.of(user));
+
+            userService.resetPassword("user1");
+
+            then(ssoApiClient).should().resetPassword("user1");
+        }
+
+        @Test
+        @DisplayName("성공 - 남의 이메일로 초대해 기존 SSO 계정과 연결되면 응답에 그 계정의 로그인 아이디 · 이름을 싣지 않는다")
+        void inviteExistingSsoAccountHidesLoginId() {
+            given(ssoApiClient.inviteUser(any())).willReturn(existingSsoAccount());
+            given(userRepository.findBySsoUserRowId(500L)).willReturn(Optional.empty());
+
+            UserServiceDto.InviteResult result = userService.inviteUser(UserServiceDto.builder()
+                    .id("new_kim").name("김신입").email("kim@other.com").company("NONE").build());
+
+            assertThat(result.isAlreadyExists()).isTrue();
+            assertThat(result.getUserId()).isNull();
+            assertThat(result.getName()).isNull();
+            assertThat(result.getEmail()).isEqualTo("kim@other.com");
+        }
+    }
+
+    @Nested
     @DisplayName("회원 가입")
     class JoinUser {
         @Test

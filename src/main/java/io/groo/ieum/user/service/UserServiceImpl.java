@@ -599,12 +599,15 @@ public class UserServiceImpl implements UserService {
             );
             userRepository.save(user);
 
+            // 이음 밖에서 만들어진 계정이라 그 사람의 로그인 아이디 · 이름은 응답에 싣지 않는다 —
+            // 관리자가 남의 이메일을 넣어 아이디를 알아내는 통로가 되지 않게(보안 점검 IEU-1).
+            // 메일은 관리자가 직접 넣은 값만 돌려준다
             return UserServiceDto.InviteResult.builder()
                     .alreadyExists(true)
                     .ssoUserRowId(user.getSsoUserRowId())
-                    .userId(user.getId())
-                    .name(user.getName())
-                    .email(user.getEmail())
+                    .userId(null)
+                    .name(null)
+                    .email(data.getEmail())
                     .message(ssoResponse.getMessage())
                     .invitationSentAt(ssoResponse.getInvitationSentAt())
                     .invitationExpiresAt(ssoResponse.getInvitationExpiresAt())
@@ -738,8 +741,16 @@ public class UserServiceImpl implements UserService {
     public void resetPassword(String targetUserId) {
         log.debug("비밀번호 리셋 요청: userId={}", targetUserId);
 
+        // 이음 사용자만 대상으로 삼는다 — 이음에 없는 계정(담다 전용 · SSO 관리자 등), 삭제(퇴사)된 사용자,
+        // 내부 계정(SYSTEM 소속), SSO 와 연결되지 않은 행은 SSO 로 넘기지 않는다(보안 점검 IEU-1)
+        User user = checkUserExist(targetUserId);
+        if (user.getSsoUserRowId() == null || User.isSystemCompany(user.getCompany())) {
+            log.warn("비밀번호 리셋 거부 - 이음 관리 대상이 아님: userId={}", targetUserId);
+            throw new EntityNotFoundException(HrErrorCode.USER_NOT_FOUND);
+        }
+
         // 임시 비밀번호 자동 생성·이메일 발송·강제 변경은 SSO 가 처리(평문 미반환)
-        ssoApiClient.resetPassword(targetUserId);
+        ssoApiClient.resetPassword(user.getId());
 
         log.info("비밀번호 리셋 완료: userId={}", targetUserId);
     }
