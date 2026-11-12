@@ -1,5 +1,10 @@
 package io.groo.ieum.repository;
 
+import java.time.LocalDate;
+import io.groo.core.type.YNType;
+import io.groo.core.type.CountryCode;
+import io.groo.ieum.permission.domain.UserRole;
+import io.groo.ieum.user.domain.User;
 import io.groo.ieum.permission.domain.Permission;
 import io.groo.ieum.permission.domain.Role;
 import io.groo.ieum.permission.repository.RoleQueryDslRepository;
@@ -237,5 +242,35 @@ class RoleQueryDslRepositoryTest {
         // then - findByCode로 역할 조회하고 getPermissions()로 권한 확인 (soft delete 필터링)
         Role updatedRole = roleRepository.findByCode("ADMIN").orElseThrow();
         assertThat(updatedRole.getPermissions()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("역할의 살아 있는 사용자 부여 기록만 조회한다 (IEU-5)")
+    void findActiveUserRolesByRole() {
+        // given
+        Role hr = Role.createRole("HR", "인사", null);
+        Role other = Role.createRole("ETC", "기타", null);
+        em.persist(hr);
+        em.persist(other);
+        User active = User.createUser(null, "u1", "직원1", "u1@test.com", LocalDate.of(1990, 1, 1), "NONE", "9 ~ 18",
+                LocalDate.now(), YNType.N, null, null, CountryCode.KR);
+        User revoked = User.createUser(null, "u2", "직원2", "u2@test.com", LocalDate.of(1990, 1, 1), "NONE", "9 ~ 18",
+                LocalDate.now(), YNType.N, null, null, CountryCode.KR);
+        active.addRole(hr);
+        active.addRole(other);
+        revoked.addRole(hr);
+        revoked.removeRole(hr);
+        em.persist(active);
+        em.persist(revoked);
+        em.flush();
+        em.clear();
+
+        // when
+        Role found = roleRepository.findByCode("HR").orElseThrow();
+        List<UserRole> grants = roleRepository.findActiveUserRolesByRole(found);
+
+        // then
+        assertThat(grants).hasSize(1);
+        assertThat(grants.get(0).getUser().getId()).isEqualTo("u1");
     }
 }

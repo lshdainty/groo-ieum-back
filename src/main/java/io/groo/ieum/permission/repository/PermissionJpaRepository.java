@@ -2,6 +2,7 @@ package io.groo.ieum.permission.repository;
 
 import io.groo.core.type.YNType;
 import io.groo.ieum.permission.domain.Permission;
+import io.groo.ieum.permission.domain.RolePermission;
 import io.groo.ieum.permission.type.ActionType;
 import io.groo.ieum.permission.type.ResourceType;
 import jakarta.persistence.EntityManager;
@@ -45,6 +46,16 @@ public class PermissionJpaRepository implements PermissionRepository {
         return em.createQuery(
                 "select p from Permission p where p.resource = :resource and p.isDeleted = :isDeleted order by p.action asc", Permission.class)
                 .setParameter("resource", resourceType)
+                .setParameter("isDeleted", YNType.N)
+                .getResultList();
+    }
+
+    @Override
+    public List<RolePermission> findActiveRolePermissionsByPermission(Permission permission) {
+        return em.createQuery(
+                "select rp from RolePermission rp where rp.permission = :permission and rp.isDeleted = :isDeleted",
+                RolePermission.class)
+                .setParameter("permission", permission)
                 .setParameter("isDeleted", YNType.N)
                 .getResultList();
     }

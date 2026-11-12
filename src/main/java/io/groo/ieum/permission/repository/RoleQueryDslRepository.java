@@ -5,8 +5,10 @@ import io.groo.ieum.permission.domain.Permission;
 import io.groo.ieum.permission.domain.QPermission;
 import io.groo.ieum.permission.domain.QRole;
 import io.groo.ieum.permission.domain.QRolePermission;
+import io.groo.ieum.permission.domain.QUserRole;
 import io.groo.ieum.permission.domain.Role;
 import io.groo.ieum.permission.domain.RolePermission;
+import io.groo.ieum.permission.domain.UserRole;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
@@ -83,6 +85,19 @@ public class RoleQueryDslRepository implements RoleRepository {
                         rolePermission.isDeleted.eq(YNType.N).or(rolePermission.isNull())
                 )
                 .orderBy(role.code.asc())
+                .fetch();
+    }
+
+    @Override
+    public List<UserRole> findActiveUserRolesByRole(Role role) {
+        QUserRole userRole = QUserRole.userRole;
+
+        return queryFactory
+                .selectFrom(userRole)
+                .where(
+                        userRole.role.eq(role),
+                        userRole.isDeleted.eq(YNType.N)
+                )
                 .fetch();
     }
 }

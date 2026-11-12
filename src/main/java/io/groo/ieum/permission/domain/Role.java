@@ -162,9 +162,11 @@ public class Role extends AuditingFieldsWithIp {
      * @return 권한 리스트
      */
     public List<Permission> getPermissions() {
+        // 매핑이 살아 있어도 권한 자체가 삭제됐으면 뺀다(보안 점검 IEU-5)
         return this.rolePermissions.stream()
                 .filter(rp -> YNType.isN(rp.getIsDeleted()))
                 .map(RolePermission::getPermission)
+                .filter(permission -> !YNType.isY(permission.getIsDeleted()))
                 .toList();
     }
 
@@ -218,6 +220,7 @@ public class Role extends AuditingFieldsWithIp {
     public boolean hasPermission(String permissionCode) {
         return this.rolePermissions.stream()
                 .filter(rp -> YNType.isN(rp.getIsDeleted()))
+                .filter(rp -> !YNType.isY(rp.getPermission().getIsDeleted()))
                 .anyMatch(rp -> rp.getPermission().getCode().equals(permissionCode));
     }
 }

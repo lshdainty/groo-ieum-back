@@ -1,6 +1,7 @@
 package io.groo.ieum.permission.repository;
 
 import io.groo.ieum.permission.domain.Permission;
+import io.groo.ieum.permission.domain.RolePermission;
 
 import java.util.List;
 import java.util.Optional;
@@ -39,4 +40,13 @@ public interface PermissionRepository {
      * @return List<Permission>
      */
     List<Permission> findByResource(String resource);
+
+    /**
+     * 권한의 살아 있는 역할 매핑 조회<br>
+     * 권한을 삭제할 때 그 권한을 가진 역할에서 함께 회수하기 위해 쓴다
+     *
+     * @param permission 대상 권한
+     * @return 삭제되지 않은 RolePermission 목록
+     */
+    List<RolePermission> findActiveRolePermissionsByPermission(Permission permission);
 }
