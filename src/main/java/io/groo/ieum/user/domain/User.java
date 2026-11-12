@@ -18,12 +18,15 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.BatchSize;
 
+import java.text.Normalizer;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -203,12 +206,24 @@ public class User extends AuditingFieldsWithIp {
     public static final String SYSTEM_COMPANY = "SYSTEM";
 
     /**
+     * 비교에서 지우는 글자 — 결합 문자(악센트 등 \p{M}), 서식 문자(폭 없는 공백 등 \p{Cf}), 제어 문자, 공백류
+     */
+    private static final Pattern COMPANY_COMPARE_IGNORABLE = Pattern.compile("[\\p{M}\\p{Cf}\\p{Cc}\\p{Z}\\s]");
+
+    /**
      * 소속 값이 내부 계정 표식({@link #SYSTEM_COMPANY})인지 확인<br>
-     * DB 비교(`company != 'SYSTEM'`)는 대소문자를 가리지 않고 끝 공백을 무시하는 콜레이션이라
-     * "system" · "SYSTEM " 도 같은 값으로 걸러진다 — 검사도 같은 기준으로 한다
+     * DB 비교(`company != 'SYSTEM'`, 콜레이션 utf8mb4_unicode_ci)는 대소문자 · 끝 공백뿐 아니라 악센트(É=E),
+     * 전각 글자(Ｓ=S), 무시 가능한 글자(폭 없는 공백)도 같은 글자로 본다. 그래서 검사는 그보다 넓게 잡는다 —
+     * NFKC(호환 분해: 전각 · 합자 · ſ→s) → NFD(악센트 분리) 뒤 결합 문자 · 서식 · 제어 · 공백을 지우고 대문자로 비교한다
+     * (보안 점검 IEU-3). 넓게 잡아 막는 쪽으로 틀리는 것은 괜찮다 — 정상 회사 코드가 SYSTEM 의 변형일 일은 없다
      */
     public static boolean isSystemCompany(String company) {
-        return company != null && SYSTEM_COMPANY.equalsIgnoreCase(company.strip());
+        if (company == null) {
+            return false;
+        }
+        String folded = Normalizer.normalize(Normalizer.normalize(company, Normalizer.Form.NFKC), Normalizer.Form.NFD);
+        folded = COMPANY_COMPARE_IGNORABLE.matcher(folded).replaceAll("");
+        return SYSTEM_COMPANY.equals(folded.toUpperCase(Locale.ROOT));
     }
 
     /**
