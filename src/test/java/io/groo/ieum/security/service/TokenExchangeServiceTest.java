@@ -1,5 +1,6 @@
 package io.groo.ieum.security.service;
 
+import io.groo.core.exception.UnauthorizedException;
 import io.groo.ieum.client.sso.SsoApiClient;
 import io.groo.ieum.security.controller.dto.TokenExchangeDto;
 import io.groo.ieum.security.jwt.JwtTokenProvider;
@@ -16,10 +17,14 @@ import java.util.Collections;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 /**
@@ -43,11 +48,13 @@ class TokenExchangeServiceTest {
         given(jwtTokenProvider.validateSsoToken("ssoToken")).willReturn(true);
         given(jwtTokenProvider.getServicesFromSsoToken("ssoToken")).willReturn(List.of("hr"));
         given(jwtTokenProvider.getUserIdFromSsoToken("ssoToken")).willReturn("user1");
+        given(jwtTokenProvider.getUserNoFromSsoToken("ssoToken")).willReturn(1L);
 
         User user = mock(User.class);
         given(user.getRoles()).willReturn(Collections.emptyList());
         given(user.getAllAuthorities()).willReturn(Collections.emptyList());
         given(user.getSsoUserRowId()).willReturn(1L);
+        given(user.isLinkedToSsoUser(1L)).willCallRealMethod();
         given(user.getId()).willReturn("user1");
         given(user.getName()).willReturn("홍길동");
         given(user.getEmail()).willReturn("hong@porest.com");
@@ -61,5 +68,48 @@ class TokenExchangeServiceTest {
         assertThat(result.getAccessToken()).isEqualTo("hrToken");
         assertThat(result.getExpiresIn()).isEqualTo(3600L);
         verify(ssoApiClient).exchangeOAuthCode("code", "verifier", "https://hr/cb");
+    }
+
+    private User linkedUser(Long ssoUserRowId) {
+        User user = mock(User.class);
+        org.mockito.Mockito.lenient().when(user.getSsoUserRowId()).thenReturn(ssoUserRowId);
+        given(user.isLinkedToSsoUser(any())).willCallRealMethod();
+        given(userService.findUserById("user1")).willReturn(user);
+        return user;
+    }
+
+    private void validSsoToken(Long userNo) {
+        given(jwtTokenProvider.validateSsoToken("ssoToken")).willReturn(true);
+        given(jwtTokenProvider.getServicesFromSsoToken("ssoToken")).willReturn(List.of("hr"));
+        given(jwtTokenProvider.getUserIdFromSsoToken("ssoToken")).willReturn("user1");
+        given(jwtTokenProvider.getUserNoFromSsoToken("ssoToken")).willReturn(userNo);
+    }
+
+    @Test
+    @DisplayName("보안 점검 IEU-6 - 로그인 아이디가 같아도 SSO 사용자 번호가 이음 연결 번호와 다르면 HR 토큰을 내주지 않는다")
+    void exchangeRejectsUserNoMismatch() {
+        // 위조 이벤트로 관리자 행(연결 번호 1)의 로그인 아이디가 공격자 아이디로 덮였다 — 공격자의 SSO 번호는 42
+        validSsoToken(42L);
+        linkedUser(1L);
+
+        assertThatThrownBy(() -> sut.exchange("ssoToken"))
+                .isInstanceOf(UnauthorizedException.class);
+        verify(jwtTokenProvider, never()).createHrAccessToken(any(User.class), anyList(), anyList(), anyBoolean());
+    }
+
+    @Test
+    @DisplayName("보안 점검 IEU-6 - SSO 토큰에 사용자 번호가 없거나 이음 행이 SSO 와 연결되지 않았으면 거절한다")
+    void exchangeRejectsMissingUserNo() {
+        validSsoToken(null);
+        linkedUser(1L);
+        assertThatThrownBy(() -> sut.exchange("ssoToken")).isInstanceOf(UnauthorizedException.class);
+    }
+
+    @Test
+    @DisplayName("보안 점검 IEU-6 - 이음 행에 연결 번호가 없으면 거절한다")
+    void exchangeRejectsUnlinkedRow() {
+        validSsoToken(1L);
+        linkedUser(null);
+        assertThatThrownBy(() -> sut.exchange("ssoToken")).isInstanceOf(UnauthorizedException.class);
     }
 }
