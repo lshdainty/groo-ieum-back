@@ -1,5 +1,8 @@
 package io.groo.ieum.common.event;
 
+import io.groo.core.security.event.SsoEventSignature;
+import io.groo.core.security.event.SsoEventVerifier;
+import java.util.Optional;
 import io.groo.ieum.security.service.TokenRevocationService;
 import io.groo.ieum.user.domain.User;
 import io.groo.ieum.user.repository.UserRepository;
@@ -30,6 +33,7 @@ public class SsoSessionEventSubscriber {
 
     private final UserRepository userRepository;
     private final TokenRevocationService tokenRevocationService;
+    private final SsoEventVerifier ssoEventVerifier;
 
     /** 발행 쪽이 필드를 더해도 계속 읽히게 모르는 필드는 무시한다 */
     private final ObjectMapper objectMapper = JsonMapper.builder()
@@ -38,9 +42,14 @@ public class SsoSessionEventSubscriber {
 
     /** Redis {@code MessageListenerAdapter} 가 부른다. */
     public void handleSessionEvent(String message) {
+        // 서명 확인(보안 점검 IEU-6) — 통과하면 서명 안의 원문을 쓴다. 거절 이유는 검증기가 warn 으로 남긴다
+        Optional<String> verified = ssoEventVerifier.verify(SsoEventSignature.SESSION_EVENTS_CHANNEL, message);
+        if (verified.isEmpty()) {
+            return;
+        }
         SessionEvent event;
         try {
-            event = objectMapper.readValue(message, SessionEvent.class);
+            event = objectMapper.readValue(verified.get(), SessionEvent.class);
         } catch (JacksonException e) {
             log.error("세션 이벤트를 읽지 못했다: {}", e.getMessage());
             return;
