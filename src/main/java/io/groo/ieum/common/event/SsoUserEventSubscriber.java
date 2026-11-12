@@ -4,6 +4,7 @@ import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
 import io.groo.core.util.MaskUtils;
+import io.groo.ieum.security.service.TokenRevocationService;
 import io.groo.ieum.user.domain.User;
 import io.groo.ieum.user.repository.UserRepository;
 import lombok.extern.slf4j.Slf4j;
@@ -28,10 +29,12 @@ public class SsoUserEventSubscriber {
 
     private final UserRepository userRepository;
     private final ObjectMapper objectMapper;
+    private final TokenRevocationService tokenRevocationService;
 
-    public SsoUserEventSubscriber(UserRepository userRepository) {
+    public SsoUserEventSubscriber(UserRepository userRepository, TokenRevocationService tokenRevocationService) {
         this.userRepository = userRepository;
         this.objectMapper = JsonMapper.builder().build();
+        this.tokenRevocationService = tokenRevocationService;
     }
 
     /**
@@ -111,6 +114,7 @@ public class SsoUserEventSubscriber {
 
         User user = userOpt.get();
         user.deleteUser();
+        tokenRevocationService.revokeAllForUser(user.getId());
         log.info("User deleted from SSO event: ssoUserRowId={}", event.getUserNo());
     }
 

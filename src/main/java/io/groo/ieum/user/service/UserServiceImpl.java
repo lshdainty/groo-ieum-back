@@ -18,6 +18,7 @@ import io.groo.ieum.department.domain.UserDepartment;
 import io.groo.ieum.department.repository.DepartmentRepository;
 import io.groo.ieum.permission.domain.Role;
 import io.groo.ieum.permission.repository.RoleRepository;
+import io.groo.ieum.security.service.TokenRevocationService;
 import io.groo.ieum.user.domain.User;
 import io.groo.ieum.user.repository.UserRepository;
 import io.groo.ieum.user.service.dto.UserServiceDto;
@@ -53,6 +54,7 @@ public class UserServiceImpl implements UserService {
     private final DepartmentRepository departmentRepository;
     private final EntityManager em;
     private final SsoApiClient ssoApiClient;
+    private final TokenRevocationService tokenRevocationService;
 
     @Value("${sso.client-code}")
     private String ssoClientCode;
@@ -304,6 +306,11 @@ public class UserServiceImpl implements UserService {
                     .collect(Collectors.toList());
         }
 
+        // 역할이 실제로 바뀌면 그 사용자의 이음 토큰을 전부 끊는다 — 토큰에 실린 옛 역할로 남은 수명 동안
+        // 읽지 못하게(보안 점검 IEU-2). 같은 목록을 다시 보낸 것은 변경이 아니다
+        boolean rolesChanged = roles != null && !user.getRoles().stream().map(Role::getCode).collect(Collectors.toSet())
+                .equals(roles.stream().map(Role::getCode).collect(Collectors.toSet()));
+
         user.updateUser(null, data.getName(), data.getEmail(), roles, data.getBirth(),
                 data.getCompany(),
                 data.getWorkTime(),
@@ -317,6 +324,9 @@ public class UserServiceImpl implements UserService {
             log.debug("프로필 이미지 삭제: id={}", data.getId());
             user.removeProfile();
         }
+        if (rolesChanged) {
+            tokenRevocationService.revokeAllForUser(user.getId());
+        }
         log.info("사용자 수정 완료: id={}", data.getId());
     }
 
@@ -326,6 +336,8 @@ public class UserServiceImpl implements UserService {
         log.debug("사용자 삭제 시작: userId={}", userId);
         User user = checkUserExist(userId);
         user.deleteUser();
+        // 삭제(퇴사)된 사용자의 이음 토큰을 전부 끊는다(보안 점검 IEU-2)
+        tokenRevocationService.revokeAllForUser(user.getId());
         log.info("사용자 삭제 완료: userId={}", userId);
     }
 
