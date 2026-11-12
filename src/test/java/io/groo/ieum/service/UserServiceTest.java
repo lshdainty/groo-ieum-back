@@ -183,6 +183,22 @@ class UserServiceTest {
             assertThat(User.isSystemCompany("SYSTEMS")).isFalse();
             assertThat(User.isSystemCompany(null)).isFalse();
         }
+
+        @Test
+        @DisplayName("판별 - 보안 점검 IEU-3 잔여: unicode_ci 가 같다고 보는 악센트 · 전각 · 폭 없는 글자 변형도 SYSTEM 으로 본다")
+        void isSystemCompanyMatchesUnicodeVariants() {
+            assertThat(User.isSystemCompany("SYSTÉM")).isTrue();                // 악센트(합성형 É)
+            assertThat(User.isSystemCompany("SYSTE\u0301M")).isTrue();          // 악센트(결합 문자)
+            assertThat(User.isSystemCompany("ＳＹＳＴＥＭ")).isTrue();            // 전각
+            assertThat(User.isSystemCompany("S\u200BYSTEM")).isTrue();          // 폭 없는 공백
+            assertThat(User.isSystemCompany("system\u3000")).isTrue();          // 전각 공백
+            assertThat(User.isSystemCompany("\u017Fystem")).isTrue();           // ſ(긴 s) → s
+            assertThat(User.isSystemCompany("ｓｙｓｔｅｍ")).isTrue();            // 전각 소문자
+            // unicode_ci 에서도 다른 글자 — 막지 않는다(키릴 Ѕ 는 라틴 S 와 다른 글자다)
+            assertThat(User.isSystemCompany("\u0405YSTEM")).isFalse();
+            assertThat(User.isSystemCompany("SYSTEMS")).isFalse();
+            assertThat(User.isSystemCompany("NONE")).isFalse();
+        }
     }
 
     @Nested
