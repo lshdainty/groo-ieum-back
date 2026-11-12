@@ -27,6 +27,8 @@ import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -114,7 +116,8 @@ public class UserApiController implements UserApi {
                 user.getInvitationSentAt(),
                 user.getInvitationExpiresAt(),
                 user.getInvitationStatus(),
-                user.getRegisteredAt()
+                user.getRegisteredAt(),
+                birthMonthDay(user.getBirth())
         ));
     }
 
@@ -180,7 +183,8 @@ public class UserApiController implements UserApi {
                             u.getId(),
                             u.getName(),
                             fullView ? u.getEmail() : null,
-                            u.getBirth(),
+                            // 생년월일 전체는 관리자에게만 — 그 밖에는 월-일만(아래 마지막 칸) 내린다(보안 점검 IEU-8)
+                            fullView ? u.getBirth() : null,
                             u.getWorkTime(),
                             fullView ? u.getJoinDate() : null,
                             fullView ? roleDetails : List.of(),
@@ -197,7 +201,8 @@ public class UserApiController implements UserApi {
                             fullView ? u.getInvitationSentAt() : null,
                             fullView ? u.getInvitationExpiresAt() : null,
                             fullView ? u.getInvitationStatus() : null,
-                            fullView ? u.getRegisteredAt() : null
+                            fullView ? u.getRegisteredAt() : null,
+                            birthMonthDay(u.getBirth())
                     );
                 })
                 .collect(Collectors.toList());
@@ -389,6 +394,13 @@ public class UserApiController implements UserApi {
         return authentication.getAuthorities().stream()
                 .anyMatch(auth -> "USER:MANAGE".equals(auth.getAuthority())
                         || "ROLE:MANAGE".equals(auth.getAuthority()));
+    }
+
+    private static final DateTimeFormatter BIRTH_MONTH_DAY = DateTimeFormatter.ofPattern("MM-dd");
+
+    /** 생일을 월-일(MM-dd) 로만 — 연도(나이)는 빼고 생일 · 회비 화면에 필요한 만큼 */
+    private static String birthMonthDay(LocalDate birth) {
+        return birth == null ? null : birth.format(BIRTH_MONTH_DAY);
     }
 
     private String getTranslatedName(String companyCode) {

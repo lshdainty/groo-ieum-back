@@ -85,7 +85,9 @@ class UserReadAccessTest {
         loginWith("USER:READ");
         var r = listUsers().get(0);
         org.assertj.core.api.Assertions.assertThat(r.getUserName()).isEqualTo("남");
-        org.assertj.core.api.Assertions.assertThat(r.getUserBirth()).isEqualTo(LocalDate.of(1991, 2, 3));
+        // 보안 점검 IEU-8: 생년월일 전체가 아니라 월-일만 내려간다
+        org.assertj.core.api.Assertions.assertThat(r.getUserBirth()).isNull();
+        org.assertj.core.api.Assertions.assertThat(r.getUserBirthMonthDay()).isEqualTo("02-03");
         org.assertj.core.api.Assertions.assertThat(r.getUserWorkTime()).isEqualTo("9 ~ 18");
         org.assertj.core.api.Assertions.assertThat(r.getProfileUrl()).isEqualTo("/p.png");
         org.assertj.core.api.Assertions.assertThat(r.getUserEmail()).isNull();
@@ -103,6 +105,8 @@ class UserReadAccessTest {
         org.assertj.core.api.Assertions.assertThat(r.getUserEmail()).isEqualTo("o@test.com");
         org.assertj.core.api.Assertions.assertThat(r.getInvitationStatus()).isEqualTo("ACTIVE");
         org.assertj.core.api.Assertions.assertThat(r.getJoinDate()).isEqualTo(LocalDate.of(2020, 1, 1));
+        org.assertj.core.api.Assertions.assertThat(r.getUserBirth()).isEqualTo(LocalDate.of(1991, 2, 3));
+        org.assertj.core.api.Assertions.assertThat(r.getUserBirthMonthDay()).isEqualTo("02-03");
     }
 
     @Test
