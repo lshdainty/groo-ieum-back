@@ -22,6 +22,7 @@ import java.util.Optional;
  *   (HR 관리자가 회사, 근무시간 등 HR 필수 정보와 함께 사용자를 생성해야 함)
  * - USER_UPDATED: 기존 사용자의 SSO 관리 필드(name, email) 동기화
  * - USER_DELETED: 기존 사용자 Soft Delete
+ * - USER_LINKED: 초대 대기 계정 번호로 만든 행을 기존 계정 번호로 다시 묶는다(SSO-2)
  */
 @Slf4j
 @Component
@@ -52,6 +53,7 @@ public class SsoUserEventSubscriber {
                 case USER_CREATED -> handleUserCreated(event);
                 case USER_UPDATED -> handleUserUpdated(event);
                 case USER_DELETED -> handleUserDeleted(event);
+                case USER_LINKED -> handleUserLinked(event);
                 default -> log.warn("Unknown event type: {}", event.getType());
             }
         } catch (JacksonException e) {
@@ -116,6 +118,41 @@ public class SsoUserEventSubscriber {
         user.deleteUser();
         tokenRevocationService.revokeAllForUser(user.getId());
         log.info("User deleted from SSO event: ssoUserRowId={}", event.getUserNo());
+    }
+
+    /**
+     * 초대 대기 계정 → 기존 계정 합침 처리(groo-sso-back 보안 점검 SSO-2).
+     *
+     * <p>SSO 는 이제 이메일이 같아도 초대를 기존 계정에 자동으로 붙이지 않는다. 초대하면 대기 계정이 생기고
+     * 이음은 그 번호로 행을 만든다. 초대 메일을 받은 사람이 기존 계정 비밀번호로 수락하면 SSO 가 대기 계정을
+     * 지우고 이 이벤트를 보낸다 — 그 행을 기존 계정 번호에 다시 묶고 이름 · 이메일 · 아이디를 맞춘다.
+     * 기존 계정이 이미 이음 행을 갖고 있으면(같은 사람을 두 번 초대) 대기 행은 지운다.
+     */
+    private void handleUserLinked(UserEvent event) {
+        log.info("Processing USER_LINKED event: ssoUserRowId={}, previous={}", event.getUserNo(), event.getPreviousUserNo());
+        if (event.getUserNo() == null || event.getPreviousUserNo() == null) {
+            log.warn("USER_LINKED event without user numbers - ignored");
+            return;
+        }
+
+        Optional<User> pending = userRepository.findBySsoUserRowId(event.getPreviousUserNo());
+        Optional<User> already = userRepository.findBySsoUserRowId(event.getUserNo());
+
+        if (pending.isEmpty()) {
+            // 이음에서 초대한 계정이 아니다(다른 서비스 초대) — 기존 행이 있으면 정보만 맞춘다
+            already.ifPresent(u -> syncSsoFields(u, event));
+            return;
+        }
+        if (already.isPresent()) {
+            pending.get().deleteUser();
+            syncSsoFields(already.get(), event);
+            log.info("USER_LINKED: existing HR user kept, pending row deleted. ssoUserRowId={}", event.getUserNo());
+            return;
+        }
+        User user = pending.get();
+        user.linkToSso(event.getUserNo());
+        syncSsoFields(user, event);
+        log.info("USER_LINKED: pending row relinked. {} -> {}", event.getPreviousUserNo(), event.getUserNo());
     }
 
     /**
