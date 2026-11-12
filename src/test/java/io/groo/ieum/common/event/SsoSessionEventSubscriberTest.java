@@ -35,7 +35,9 @@ class SsoSessionEventSubscriberTest {
 
     private final UserRepository userRepository = mock(UserRepository.class);
     private final TokenRevocationService tokenRevocationService = mock(TokenRevocationService.class);
-    private final SsoSessionEventSubscriber subscriber = new SsoSessionEventSubscriber(userRepository, tokenRevocationService);
+    private final SsoSessionEventSubscriber subscriber = new SsoSessionEventSubscriber(userRepository, tokenRevocationService,
+            // 전환 기간 설정(서명 없음 허용) — 서명 판정은 SsoEventSignatureWiringTest 가 본다
+            new io.groo.core.security.event.SsoEventVerifier(h -> null, null, false));
 
     private static String published(String type, Long ssoUserRowId) {
         return JsonMapper.builder().build().writeValueAsString(

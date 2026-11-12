@@ -30,7 +30,9 @@ class SsoUserEventSubscriberLinkedTest {
 
     private final UserRepository userRepository = mock(UserRepository.class);
     private final SsoUserEventSubscriber subscriber =
-            new SsoUserEventSubscriber(userRepository, mock(TokenRevocationService.class));
+            new SsoUserEventSubscriber(userRepository, mock(TokenRevocationService.class),
+                    // 전환 기간 설정(서명 없음 허용) — 서명 판정은 SsoEventSignatureWiringTest 가 본다
+                    new io.groo.core.security.event.SsoEventVerifier(h -> null, null, false));
 
     private static String linked(Long userNo, Long previous) {
         return JsonMapper.builder().build().writeValueAsString(

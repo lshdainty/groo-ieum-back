@@ -1,5 +1,7 @@
 package io.groo.ieum.common.event;
 
+import io.groo.core.security.event.SsoEventSignature;
+import io.groo.core.security.event.SsoEventVerifier;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
@@ -31,9 +33,12 @@ public class SsoUserEventSubscriber {
     private final UserRepository userRepository;
     private final ObjectMapper objectMapper;
     private final TokenRevocationService tokenRevocationService;
+    private final SsoEventVerifier ssoEventVerifier;
 
-    public SsoUserEventSubscriber(UserRepository userRepository, TokenRevocationService tokenRevocationService) {
+    public SsoUserEventSubscriber(UserRepository userRepository, TokenRevocationService tokenRevocationService,
+                                  SsoEventVerifier ssoEventVerifier) {
         this.userRepository = userRepository;
+        this.ssoEventVerifier = ssoEventVerifier;
         this.objectMapper = JsonMapper.builder().build();
         this.tokenRevocationService = tokenRevocationService;
     }
@@ -44,10 +49,15 @@ public class SsoUserEventSubscriber {
      */
     @Transactional
     public void handleUserEvent(String message) {
-        log.debug("Received user event: {}", message);
+        log.debug("Received user event");
 
+        // 서명 확인(보안 점검 IEU-6) — 통과하면 서명 안의 원문을 쓴다. 거절 이유는 검증기가 warn 으로 남긴다
+        Optional<String> verified = ssoEventVerifier.verify(SsoEventSignature.USER_EVENTS_CHANNEL, message);
+        if (verified.isEmpty()) {
+            return;
+        }
         try {
-            UserEvent event = objectMapper.readValue(message, UserEvent.class);
+            UserEvent event = objectMapper.readValue(verified.get(), UserEvent.class);
 
             switch (event.getType()) {
                 case USER_CREATED -> handleUserCreated(event);

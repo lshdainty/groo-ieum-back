@@ -181,6 +181,10 @@ security:
 # SSO 연동 설정
 sso:
   api-url: ${SSO_API_URL}
+  events:
+    # SSO Redis 이벤트 서명 강제(보안 점검 IEU-6). 전환 기간엔 false — 서명 없는 이벤트도 경고와 함께 받는다.
+    # sso-back 이 서명해서 발행하기 시작한 뒤 true 로 바꾼다
+    require-signature: ${SSO_EVENTS_REQUIRE_SIGNATURE:false}
   client-code: ${SSO_CLIENT_CODE:hr}
   client-secret: ${SSO_CLIENT_SECRET:}
   timeout:
