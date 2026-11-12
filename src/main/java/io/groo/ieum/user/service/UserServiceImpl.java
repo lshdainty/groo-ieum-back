@@ -389,6 +389,33 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
+    // 토큰 교환(읽기 전용 트랜잭션) 안에서 불린다 — 합류하면 쓰기가 flush 되지 않으므로 따로 연다
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
+    public boolean relinkMergedSsoUser(Long ssoUserNo, List<Long> previousNos, String userId, String name,
+                                       String email) {
+        if (ssoUserNo == null || previousNos == null || previousNos.isEmpty()) {
+            return false;
+        }
+        if (userRepository.findBySsoUserRowId(ssoUserNo).filter(u -> YNType.isN(u.getIsDeleted())).isPresent()) {
+            // 이미 그 번호의 행이 있다 — 다시 묶을 일이 아니다(아이디가 바뀐 경우는 USER_UPDATED 몫)
+            return false;
+        }
+        for (Long previous : previousNos) {
+            Optional<User> pending = userRepository.findBySsoUserRowId(previous)
+                    .filter(u -> YNType.isN(u.getIsDeleted()));
+            if (pending.isEmpty()) {
+                continue;
+            }
+            User user = pending.get();
+            user.linkToSso(ssoUserNo);
+            user.updateUser(userId, name, email, null, null, null, null, null, null, null, null, null);
+            log.info("초대 수락 재연결(USER_LINKED 유실 복구): {} -> {}", previous, ssoUserNo);
+            return true;
+        }
+        return false;
+    }
+
+    @Override
     public String extractPhysicalFileNameFromUrl(String profileUrl) {
         if (!StringUtils.hasText(profileUrl)) {
             return null;

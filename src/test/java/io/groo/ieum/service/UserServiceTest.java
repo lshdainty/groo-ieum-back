@@ -1569,4 +1569,47 @@ class UserServiceTest {
     }
 
     // SSO 분리로 인해 초대 토큰, 비밀번호 초기화/변경, 회원가입 관련 테스트는 porest-sso로 이동됨
+
+    @Nested
+    @DisplayName("초대 수락 재연결 (SSO-2 운영 위험)")
+    class RelinkMergedSsoUser {
+
+        private User pending(Long ssoUserRowId) {
+            User user = createTestUser("newboss", "대기", "boss@example.com");
+            user.linkToSso(ssoUserRowId);
+            return user;
+        }
+
+        @Test
+        @DisplayName("SSO 가 알려 준 대기 번호의 행을 그 계정 번호에 묶고 아이디 · 이름 · 이메일을 맞춘다")
+        void relinksPendingRow() {
+            User row = pending(101L);
+            given(userRepository.findBySsoUserRowId(1L)).willReturn(Optional.empty());
+            given(userRepository.findBySsoUserRowId(101L)).willReturn(Optional.of(row));
+
+            boolean relinked = userService.relinkMergedSsoUser(1L, List.of(101L), "boss", "대표", "boss@example.com");
+
+            assertThat(relinked).isTrue();
+            assertThat(row.getSsoUserRowId()).isEqualTo(1L);
+            assertThat(row.getId()).isEqualTo("boss");
+            assertThat(row.getName()).isEqualTo("대표");
+        }
+
+        @Test
+        @DisplayName("그 계정 번호의 행이 이미 있으면 묶지 않는다")
+        void alreadyLinkedRowExists() {
+            given(userRepository.findBySsoUserRowId(1L)).willReturn(Optional.of(createTestUser("boss", "대표", "boss@example.com")));
+
+            assertThat(userService.relinkMergedSsoUser(1L, List.of(101L), "boss", "대표", "boss@example.com")).isFalse();
+        }
+
+        @Test
+        @DisplayName("대기 번호의 행이 없으면(다른 서비스 초대) 묶지 않는다")
+        void noPendingRow() {
+            given(userRepository.findBySsoUserRowId(1L)).willReturn(Optional.empty());
+            given(userRepository.findBySsoUserRowId(101L)).willReturn(Optional.empty());
+
+            assertThat(userService.relinkMergedSsoUser(1L, List.of(101L), "boss", "대표", "boss@example.com")).isFalse();
+        }
+    }
 }

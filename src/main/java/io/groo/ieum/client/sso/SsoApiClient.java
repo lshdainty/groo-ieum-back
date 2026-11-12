@@ -43,6 +43,13 @@ public interface SsoApiClient {
     List<SsoInvitationStatusResponse> getInvitationStatus(List<Long> userNos);
 
     /**
+     * 이 SSO 계정으로 합쳐진 초대 대기 계정 번호들(groo-sso-back 보안 점검 SSO-2 운영 위험).<br>
+     * 초대 수락 알림(USER_LINKED)을 놓쳤을 때 토큰 교환이 이음 행을 다시 묶는 데 쓴다.
+     * 실패하면 빈 목록 — 재처리 못 할 뿐 로그인 흐름의 다른 실패와 같다.
+     */
+    List<Long> getLinkedFrom(Long userNo);
+
+    /**
      * OAuth2 인가코드(code)를 SSO {@code /oauth2/token} 에서 교환 → SSO access token(JWT) 반환<br>
      * PKCE code_verifier 와 함께 전달. 표준 Authorization Code + PKCE 흐름.
      *
