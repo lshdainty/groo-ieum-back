@@ -14,6 +14,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.MessageSource;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.authentication.TestingAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 
@@ -72,7 +73,7 @@ class CalendarVacationReasonTest {
     @Test
     @DisplayName("가림 - 일반 직원에게 남의 휴가 사유는 비어 있고 종류와 본인 사유는 보인다")
     void ordinaryUserDoesNotSeeOthersReason() {
-        Map<String, String> m = descByUser("SCHEDULE:READ");
+        Map<String, String> m = descByUser("SCHEDULE:READ", "VACATION:READ");
         assertThat(m.get("me")).isEqualTo("내 사유");
         assertThat(m.get("other")).isNull();
     }
@@ -80,7 +81,23 @@ class CalendarVacationReasonTest {
     @Test
     @DisplayName("공개 - 휴가 관리 · 휴가 승인 권한자는 남의 사유도 본다")
     void managerAndApproverSeeReason() {
-        assertThat(descByUser("VACATION:MANAGE").get("other")).isEqualTo("남의 사유");
-        assertThat(descByUser("VACATION:APPROVE").get("other")).isEqualTo("남의 사유");
+        assertThat(descByUser("VACATION:READ", "VACATION:MANAGE").get("other")).isEqualTo("남의 사유");
+        assertThat(descByUser("VACATION:READ", "VACATION:APPROVE").get("other")).isEqualTo("남의 사유");
+    }
+
+    @Test
+    @DisplayName("보안 점검 IEU-8 - 캘린더 조회는 일정 조회 · 휴가 조회 중 하나가 있어야 한다")
+    void calendarRequiresReadAuthority() throws Exception {
+        PreAuthorize pa = CalendarApiController.class
+                .getMethod("searchEventsByPeriod", LocalDateTime.class, LocalDateTime.class, User.class)
+                .getAnnotation(PreAuthorize.class);
+        assertThat(pa).isNotNull();
+        assertThat(pa.value()).isEqualTo("hasAnyAuthority('SCHEDULE:READ', 'VACATION:READ')");
+    }
+
+    @Test
+    @DisplayName("보안 점검 IEU-8 - 일정 조회만 있으면 휴가는 담지 않는다")
+    void scheduleOnlyHidesVacations() {
+        assertThat(descByUser("SCHEDULE:READ")).isEmpty();
     }
 }

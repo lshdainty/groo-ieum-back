@@ -13,6 +13,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.MessageSource;
 import org.springframework.context.i18n.LocaleContextHolder;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.RestController;
@@ -29,12 +30,20 @@ public class CalendarApiController implements CalendarApi {
     private final VacationService vacationService;
     private final MessageSource messageSource;
 
+    /**
+     * 기간 안의 일정 · 휴가를 한 목록으로 내린다.<br>
+     * 일정은 일정 조회(SCHEDULE:READ), 휴가는 휴가 조회(VACATION:READ) 권한이 있을 때만 담는다 —
+     * 역할이 하나도 없는 로그인 사용자가 전 직원의 일정과 휴가를 보던 것을 막는다(보안 점검 IEU-8)
+     */
     @Override
+    @PreAuthorize("hasAnyAuthority('SCHEDULE:READ', 'VACATION:READ')")
     public ApiResponse searchEventsByPeriod(LocalDateTime startDate, LocalDateTime endDate, @LoginUser User loginUser) {
         boolean canSeeAllReasons = hasAnyAuthority("VACATION:MANAGE", "VACATION:APPROVE");
         List<CalendarApiDto.searchEventsByPeriodResp> resp = new ArrayList<>();
 
-        List<Schedule> schedules = scheduleService.searchSchedulesByPeriod(startDate, endDate);
+        List<Schedule> schedules = hasAnyAuthority("SCHEDULE:READ")
+                ? scheduleService.searchSchedulesByPeriod(startDate, endDate)
+                : List.of();
         resp.addAll(schedules.stream()
                 .map(s -> new CalendarApiDto.searchEventsByPeriodResp(
                         s.getUser().getId(),
@@ -50,7 +59,9 @@ public class CalendarApiController implements CalendarApi {
                 ))
                 .toList());
 
-        List<VacationServiceDto> histories = vacationService.getVacationUsagesByPeriod(startDate, endDate);
+        List<VacationServiceDto> histories = hasAnyAuthority("VACATION:READ")
+                ? vacationService.getVacationUsagesByPeriod(startDate, endDate)
+                : List.of();
         resp.addAll(histories.stream()
                 .map(v -> new CalendarApiDto.searchEventsByPeriodResp(
                         v.getUser().getId(),
