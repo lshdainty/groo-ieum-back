@@ -32,7 +32,7 @@ class SsoUserEventSubscriberLinkedTest {
     private final SsoUserEventSubscriber subscriber =
             new SsoUserEventSubscriber(userRepository, mock(TokenRevocationService.class),
                     // 전환 기간 설정(서명 없음 허용) — 서명 판정은 SsoEventSignatureWiringTest 가 본다
-                    new io.groo.core.security.event.SsoEventVerifier(h -> null, null, false));
+                    new io.groo.core.security.event.SsoEventVerifier(h -> null, null, false), new SsoUserUpdateOrder(org.mockito.Mockito.mock(org.springframework.data.redis.core.StringRedisTemplate.class)));
 
     private static String linked(Long userNo, Long previous) {
         return JsonMapper.builder().build().writeValueAsString(
