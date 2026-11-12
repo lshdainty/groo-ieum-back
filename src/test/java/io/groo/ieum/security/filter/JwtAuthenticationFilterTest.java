@@ -298,13 +298,36 @@ class JwtAuthenticationFilterTest {
             given(jwtTokenProvider.isHrToken(SSO)).willReturn(false);
             given(jwtTokenProvider.isSsoAccessTokenForHr(SSO)).willReturn(true);
             given(jwtTokenProvider.getUserId(SSO)).willReturn("user1");
-            io.groo.ieum.user.domain.User user = org.mockito.Mockito.mock(io.groo.ieum.user.domain.User.class);
+            given(jwtTokenProvider.getUserNoFromSsoToken(SSO)).willReturn(7L);
+            User user = linkedUser(7L);
             given(user.getAllAuthorities()).willReturn(List.of("ROLE_USER"));
-            given(userService.findUserById("user1")).willReturn(user);
 
             run();
 
             assertThat(SecurityContextHolder.getContext().getAuthentication()).isNotNull();
+        }
+
+        private User linkedUser(Long ssoUserRowId) {
+            User user = org.mockito.Mockito.mock(User.class);
+            given(user.getSsoUserRowId()).willReturn(ssoUserRowId);
+            given(user.isLinkedToSsoUser(org.mockito.ArgumentMatchers.any())).willCallRealMethod();
+            given(userService.findUserById("user1")).willReturn(user);
+            return user;
+        }
+
+        @Test
+        @DisplayName("실패 - 보안 점검 IEU-6: SSO 사용자 번호가 이음 연결 번호와 다르면 인증되지 않는다")
+        void rejectsUserNoMismatch() throws Exception {
+            given(jwtTokenProvider.validateToken(SSO)).willReturn(true);
+            given(jwtTokenProvider.isHrToken(SSO)).willReturn(false);
+            given(jwtTokenProvider.isSsoAccessTokenForHr(SSO)).willReturn(true);
+            given(jwtTokenProvider.getUserId(SSO)).willReturn("user1");
+            given(jwtTokenProvider.getUserNoFromSsoToken(SSO)).willReturn(42L);
+            linkedUser(1L);
+
+            run();
+
+            assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
         }
 
         @Test

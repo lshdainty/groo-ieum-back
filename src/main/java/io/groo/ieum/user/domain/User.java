@@ -270,6 +270,14 @@ public class User extends AuditingFieldsWithIp {
     }
 
     /**
+     * SSO 사용자 번호가 이 행의 연결 번호와 같은지 — 둘 중 하나라도 없으면 같지 않다<br>
+     * 로그인 아이디는 SSO 이벤트로 바뀔 수 있는 값이라, 토큰을 이 행에 묶을 때는 번호로 대조한다(보안 점검 IEU-6)
+     */
+    public boolean isLinkedToSsoUser(Long ssoUserNo) {
+        return ssoUserNo != null && ssoUserNo.equals(getSsoUserRowId());
+    }
+
+    /**
      * 유저 수정 함수<br>
      * Entity의 경우 Setter없이 Getter만 사용<br>
      * 해당 메소드를 통해 유저 수정할 것

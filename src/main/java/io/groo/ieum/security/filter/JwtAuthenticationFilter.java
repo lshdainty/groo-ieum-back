@@ -1,6 +1,8 @@
 package io.groo.ieum.security.filter;
 
 import io.groo.core.controller.ApiResponse;
+import io.groo.core.exception.ErrorCode;
+import io.groo.core.exception.UnauthorizedException;
 import io.groo.ieum.common.config.properties.JwtProperties;
 import io.groo.ieum.common.exception.HrErrorCode;
 import io.groo.ieum.security.principal.UserPrincipal;
@@ -232,6 +234,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         // HR DB에서 사용자 및 권한 조회
         User user = userService.findUserById(userId);
+        // 토큰 교환과 같은 대조 — SSO 사용자 번호가 이음 연결 번호와 달라지면 이 행으로 인증하지 않는다(IEU-6)
+        if (!user.isLinkedToSsoUser(jwtTokenProvider.getUserNoFromSsoToken(token))) {
+            throw new UnauthorizedException(ErrorCode.UNAUTHORIZED);
+        }
 
         // 권한 목록 조회
         List<SimpleGrantedAuthority> authorities = user.getAllAuthorities().stream()

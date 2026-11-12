@@ -81,6 +81,15 @@ public class TokenExchangeService {
         // 5. HR DB에서 사용자 조회
         User user = userService.findUserById(userId);
 
+        // 5-1. 로그인 아이디만 믿지 않는다 — SSO 사용자 번호(userNo)가 이음 행의 연결 번호(ssoUserRowId)와
+        //      같아야 그 행으로 로그인시킨다. 이음 행의 아이디가 (위조 이벤트 등으로) 다른 사람 것으로 바뀌어도
+        //      그 사람의 SSO 토큰이 남의 행(예: 관리자)으로 들어오지 못한다(보안 점검 IEU-6)
+        Long ssoUserNo = jwtTokenProvider.getUserNoFromSsoToken(ssoToken);
+        if (!user.isLinkedToSsoUser(ssoUserNo)) {
+            log.warn("토큰 교환 거부 - SSO 사용자 번호와 이음 연결 번호 불일치: userId={}", userId);
+            throw new UnauthorizedException(ErrorCode.UNAUTHORIZED);
+        }
+
         // 6. 역할/권한 조회
         List<String> roles = user.getRoles().stream()
                 .map(Role::getCode)
