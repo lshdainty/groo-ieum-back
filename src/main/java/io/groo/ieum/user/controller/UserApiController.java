@@ -285,7 +285,9 @@ public class UserApiController implements UserApi {
         return ApiResponse.success();
     }
 
+    /** 프로필 사진 임시 업로드 — 사진을 고치는 자리(내 정보 · 사용자 수정)가 USER:EDIT 라 같은 권한을 건다 */
     @Override
+    @PreAuthorize("hasAuthority('USER:EDIT')")
     public ApiResponse uploadProfile(UserApiDto.UploadProfileReq data) {
         UserServiceDto dto = userService.saveProfileImgInTempFolder(data.getProfile());
         return ApiResponse.success(new UserApiDto.UploadProfileResp(

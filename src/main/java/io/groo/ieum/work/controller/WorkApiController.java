@@ -196,7 +196,9 @@ public class WorkApiController implements WorkApi {
 
     // ========== 시스템 로그 관리 ==========
 
+    /** 시스템 데일리 체크는 회사 공용 기록이라 업무 기록 권한(WORK:WRITE)이 있어야 바꾼다(보안 점검 범위 밖 관찰) */
     @Override
+    @PreAuthorize("hasAuthority('WORK:WRITE')")
     public ApiResponse toggleSystemCheck(WorkApiDto.ToggleSystemCheckReq req) {
         boolean checked = workSystemLogService.toggleSystemCheck(req.getSystemCode());
         String message = checked ? "시스템 체크가 등록되었습니다." : "시스템 체크가 해제되었습니다.";
@@ -204,6 +206,7 @@ public class WorkApiController implements WorkApi {
     }
 
     @Override
+    @PreAuthorize("hasAuthority('WORK:READ')")
     public ApiResponse checkSystemStatus(List<String> systemCodes) {
         Map<String, Boolean> statusMap = workSystemLogService.checkSystemStatusBatch(systemCodes);
 
