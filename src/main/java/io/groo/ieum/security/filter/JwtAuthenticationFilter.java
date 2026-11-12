@@ -94,6 +94,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                         filterChain.doFilter(request, response);
                         return;
                     }
+                    // 역할이 바뀌거나 삭제된 사용자의 토큰은 차단 시각 이전 발급분을 전부 거절한다(보안 점검 IEU-2)
+                    if (tokenRevocationService.isUserRevoked(jwtTokenProvider.getUserId(token),
+                            jwtTokenProvider.getHrIssuedAt(token))) {
+                        filterChain.doFilter(request, response);
+                        return;
+                    }
                     // HR JWT인 경우: Claims에서 직접 정보 추출 (DB 조회 없음)
                     authentication = createAuthenticationFromHrToken(token);
                     // 상태를 바꾸는 요청은 권한을 DB 에서 다시 읽는다 — 삭제(퇴사)된 사용자면 인증하지 않는다

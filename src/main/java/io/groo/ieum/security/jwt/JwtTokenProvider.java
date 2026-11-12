@@ -234,6 +234,13 @@ public class JwtTokenProvider {
     }
 
     /**
+     * HR 토큰의 발급 시각(iat) — 사용자 단위 차단 비교에 쓴다
+     */
+    public Date getHrIssuedAt(String token) {
+        return getHrClaims(token).getIssuedAt();
+    }
+
+    /**
      * 토큰의 남은 수명 (밀리초). 만료·파싱 실패는 0 — 갱신 판단에서 자연히 제외된다.
      */
     public long getRemainingExpiration(String token) {

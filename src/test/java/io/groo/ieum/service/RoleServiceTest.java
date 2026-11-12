@@ -12,6 +12,7 @@ import io.groo.ieum.permission.repository.RoleRepository;
 import io.groo.ieum.permission.service.RoleServiceImpl;
 import io.groo.ieum.permission.type.ActionType;
 import io.groo.ieum.permission.type.ResourceType;
+import io.groo.ieum.security.service.TokenRevocationService;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -21,6 +22,9 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import io.groo.ieum.user.domain.User;
+import java.time.LocalDate;
+import io.groo.core.type.CountryCode;
 import java.util.List;
 import java.util.Optional;
 
@@ -41,6 +45,9 @@ class RoleServiceTest {
 
     @Mock
     private PermissionRepository permissionRepository;
+
+    @Mock
+    private TokenRevocationService tokenRevocationService;
 
     @InjectMocks
     private RoleServiceImpl roleService;
@@ -476,14 +483,36 @@ class RoleServiceTest {
         void deleteRoleRevokesGrants() {
             Role role = Role.createRole("HR", "인사", null);
             given(roleRepository.findByCode("HR")).willReturn(Optional.of(role));
-            UserRole grant1 = UserRole.createUserRole(null, role);
-            UserRole grant2 = UserRole.createUserRole(null, role);
+            UserRole grant1 = UserRole.createUserRole(userWithId("u1"), role);
+            UserRole grant2 = UserRole.createUserRole(userWithId("u2"), role);
             given(roleRepository.findActiveUserRolesByRole(role)).willReturn(List.of(grant1, grant2));
 
             roleService.deleteRole("HR");
 
             assertThat(grant1.getIsDeleted()).isEqualTo(io.groo.core.type.YNType.Y);
             assertThat(grant2.getIsDeleted()).isEqualTo(io.groo.core.type.YNType.Y);
+            // 보안 점검 IEU-2: 보유자의 토큰을 끊는다
+            then(tokenRevocationService).should().revokeAllForUser("u1");
+            then(tokenRevocationService).should().revokeAllForUser("u2");
+        }
+
+        @Test
+        @DisplayName("보안 점검 IEU-2 - 역할에서 권한이 빠지면 보유자 토큰을 끊고, 늘기만 하면 끊지 않는다")
+        void permissionShrinkRevokesHolders() {
+            Permission manage = Permission.createPermission("USER:MANAGE", "사용자 관리", null, ResourceType.USER, ActionType.MANAGE);
+            Permission read = Permission.createPermission("USER:READ", "사용자 조회", null, ResourceType.USER, ActionType.READ);
+            Role role = Role.createRoleWithPermissions("HR", "인사", null, List.of(manage));
+            given(roleRepository.findByCodeWithPermissions("HR")).willReturn(Optional.of(role));
+            given(permissionRepository.findByCode("USER:READ")).willReturn(Optional.of(read));
+            given(permissionRepository.findByCode("USER:MANAGE")).willReturn(Optional.of(manage));
+            UserRole grant = UserRole.createUserRole(userWithId("u1"), role);
+            given(roleRepository.findActiveUserRolesByRole(role)).willReturn(List.of(grant));
+
+            roleService.addPermissionToRole("HR", "USER:READ");
+            then(tokenRevocationService).shouldHaveNoInteractions();
+
+            roleService.removePermissionFromRole("HR", "USER:MANAGE");
+            then(tokenRevocationService).should().revokeAllForUser("u1");
         }
 
         @Test
@@ -722,6 +751,8 @@ class RoleServiceTest {
 
             assertThat(mapping.getIsDeleted()).isEqualTo(io.groo.core.type.YNType.Y);
             assertThat(role.hasPermission("USER:MANAGE")).isFalse();
+            // 보안 점검 IEU-2: 그 권한을 가졌던 역할의 보유자를 찾아 토큰을 끊는다
+            then(roleRepository).should().findActiveUserRolesByRole(role);
         }
 
         @Test
@@ -735,5 +766,11 @@ class RoleServiceTest {
             assertThatThrownBy(() -> roleService.deletePermission(permissionCode))
                     .isInstanceOf(EntityNotFoundException.class);
         }
+    }
+
+    private static User userWithId(String id) {
+        return User.createUser(1L, id, id, id + "@test.com",
+                LocalDate.of(1990, 1, 1), "NONE", "9 ~ 18", LocalDate.now(),
+                io.groo.core.type.YNType.N, null, null, CountryCode.KR);
     }
 }

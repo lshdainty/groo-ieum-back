@@ -142,6 +142,20 @@ class JwtAuthenticationFilterTest {
         }
 
         @Test
+        @DisplayName("보안 점검 IEU-2 - 역할이 바뀌거나 삭제돼 사용자 단위로 차단된 토큰은 인증되지 않는다")
+        void userRevokedTokenRejected() throws Exception {
+            java.util.Date iat = new java.util.Date(1_700_000_000_000L);
+            given(jwtTokenProvider.getHrJti(TOKEN)).willReturn("jti-3");
+            given(tokenRevocationService.isRevoked("jti-3")).willReturn(false);
+            given(jwtTokenProvider.getHrIssuedAt(TOKEN)).willReturn(iat);
+            given(tokenRevocationService.isUserRevoked("user1", iat)).willReturn(true);
+
+            runFilter();
+
+            assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+        }
+
+        @Test
         @DisplayName("성공 - jti 없는 옛 토큰은 차단 목록을 보지 않고 만료까지 허용한다")
         void tokenWithoutJtiAllowed() throws Exception {
             given(jwtTokenProvider.getHrJti(TOKEN)).willReturn(null);

@@ -6,6 +6,7 @@ import io.groo.core.type.CountryCode;
 import io.groo.core.type.YNType;
 import io.groo.core.util.FileUtils;
 import io.groo.ieum.department.repository.DepartmentRepository;
+import io.groo.ieum.security.service.TokenRevocationService;
 import io.groo.ieum.user.domain.User;
 import io.groo.ieum.user.repository.UserRepository;
 import io.groo.ieum.user.service.EmailService;
@@ -66,6 +67,8 @@ class UserServiceTest {
     private BCryptPasswordEncoder passwordEncoder;
     @Mock
     private io.groo.ieum.client.sso.SsoApiClient ssoApiClient;
+    @Mock
+    private TokenRevocationService tokenRevocationService;
 
     @InjectMocks
     private UserServiceImpl userService;
@@ -834,6 +837,31 @@ class UserServiceTest {
         }
 
         @Test
+        @DisplayName("보안 점검 IEU-2 - 역할이 실제로 바뀌면 그 사용자의 토큰을 전부 끊는다")
+        void editUserRolesChangedRevokesTokens() {
+            User user = createTestUser("user1", "이서준", "user1@test.com");
+            given(userRepository.findById("user1")).willReturn(Optional.of(user));
+            Role role = Role.createRole("ADMIN", "관리자", "관리자 역할");
+            given(roleRepository.findByCode("ADMIN")).willReturn(Optional.of(role));
+
+            userService.editUser(UserServiceDto.builder().id("user1").roleNames(List.of("ADMIN")).build(), "admin", true, true);
+
+            then(tokenRevocationService).should().revokeAllForUser("user1");
+        }
+
+        @Test
+        @DisplayName("보안 점검 IEU-2 - 역할을 안 보내거나 같은 목록이면 토큰을 끊지 않는다")
+        void editUserRolesUnchangedKeepsTokens() {
+            User user = createTestUser("user1", "이서준", "user1@test.com");
+            given(userRepository.findById("user1")).willReturn(Optional.of(user));
+
+            userService.editUser(UserServiceDto.builder().id("user1").name("이하은").build(), "admin", true, true);
+            userService.editUser(UserServiceDto.builder().id("user1").roleNames(List.of()).build(), "admin", true, true);
+
+            then(tokenRevocationService).shouldHaveNoInteractions();
+        }
+
+        @Test
         @DisplayName("성공 - 관리 권한이 있으면 남의 정보와 역할도 고친다")
         void editUserSuccessOtherByManager() {
             User user = createTestUser("user1", "이서준", "user1@test.com");
@@ -919,6 +947,9 @@ class UserServiceTest {
 
             // when
             userService.deleteUser(userId);
+
+            // then — 보안 점검 IEU-2: 삭제된 사용자의 토큰을 전부 끊는다
+            then(tokenRevocationService).should().revokeAllForUser(userId);
 
             // then
             then(userRepository).should().findById(userId);

@@ -13,6 +13,7 @@ import io.groo.ieum.permission.repository.PermissionRepository;
 import io.groo.ieum.permission.repository.RoleRepository;
 import io.groo.ieum.permission.type.ActionType;
 import io.groo.ieum.permission.type.ResourceType;
+import io.groo.ieum.security.service.TokenRevocationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -20,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -29,6 +31,7 @@ import java.util.stream.Collectors;
 public class RoleServiceImpl implements RoleService {
     private final RoleRepository roleRepository;
     private final PermissionRepository permissionRepository;
+    private final TokenRevocationService tokenRevocationService;
 
     /** 역할 이름 최대 길이 — roles.role_name 칸(length 20) */
     static final int ROLE_NAME_MAX = 20;
@@ -115,7 +118,9 @@ public class RoleServiceImpl implements RoleService {
                         }))
                 .collect(Collectors.toList());
 
+        Set<String> before = permissionCodesOf(role);
         applyNameAndDesc(role, name, desc, permissions);
+        revokeHoldersIfPermissionsShrank(role, before);
         log.info("역할 수정 (권한 포함) 완료: roleCode={}", roleCode);
     }
 
@@ -154,8 +159,10 @@ public class RoleServiceImpl implements RoleService {
                         }))
                 .collect(Collectors.toList());
 
+        Set<String> before = permissionCodesOf(role);
         role.clearPermissions();
         permissions.forEach(role::addPermission);
+        revokeHoldersIfPermissionsShrank(role, before);
         log.info("역할 권한 수정 완료: roleCode={}, permissionCount={}", roleCode, permissions.size());
     }
 
@@ -183,7 +190,9 @@ public class RoleServiceImpl implements RoleService {
                     log.warn("권한 제거 실패 - 존재하지 않는 권한: permissionCode={}", permissionCode);
                     return new EntityNotFoundException(HrErrorCode.PERMISSION_NOT_FOUND);
                 });
+        Set<String> before = permissionCodesOf(role);
         role.removePermission(permission);
+        revokeHoldersIfPermissionsShrank(role, before);
         log.info("역할에서 권한 제거 완료: roleCode={}, permissionCode={}", roleCode, permissionCode);
     }
 
@@ -200,6 +209,8 @@ public class RoleServiceImpl implements RoleService {
         // 부여 기록도 함께 지운다 — 목록에서만 사라지고 가진 사람의 권한에는 남던 것을 막는다(보안 점검 IEU-5)
         List<UserRole> grants = roleRepository.findActiveUserRolesByRole(role);
         grants.forEach(UserRole::deleteUserRole);
+        // 그 역할을 가졌던 사람의 이음 토큰을 끊는다 — 토큰에 실린 역할로 남은 수명 동안 읽지 못하게(보안 점검 IEU-2)
+        grants.forEach(grant -> tokenRevocationService.revokeAllForUser(grant.getUser().getId()));
         log.info("역할 삭제 완료: roleCode={}, revokedUserCount={}", roleCode, grants.size());
     }
 
@@ -267,6 +278,29 @@ public class RoleServiceImpl implements RoleService {
         // 역할 매핑도 함께 지운다 — 삭제한 권한이 역할을 통해 계속 실리지 않게(보안 점검 IEU-5)
         List<RolePermission> mappings = permissionRepository.findActiveRolePermissionsByPermission(permission);
         mappings.forEach(RolePermission::deleteRolePermission);
+        // 그 권한을 가졌던 역할의 보유자 토큰을 끊는다(보안 점검 IEU-2)
+        mappings.stream()
+                .map(RolePermission::getRole)
+                .distinct()
+                .forEach(this::revokeHolders);
         log.info("권한 삭제 완료: permissionCode={}, revokedRoleCount={}", permissionCode, mappings.size());
+    }
+
+    private static Set<String> permissionCodesOf(Role role) {
+        return role.getPermissions().stream().map(Permission::getCode).collect(Collectors.toSet());
+    }
+
+    /**
+     * 역할에서 권한이 하나라도 빠졌으면 그 역할 보유자의 이음 토큰을 끊는다 — 늘어나기만 했으면 끊지 않는다(보안 점검 IEU-2)
+     */
+    private void revokeHoldersIfPermissionsShrank(Role role, Set<String> before) {
+        if (!permissionCodesOf(role).containsAll(before)) {
+            revokeHolders(role);
+        }
+    }
+
+    private void revokeHolders(Role role) {
+        roleRepository.findActiveUserRolesByRole(role)
+                .forEach(grant -> tokenRevocationService.revokeAllForUser(grant.getUser().getId()));
     }
 }
