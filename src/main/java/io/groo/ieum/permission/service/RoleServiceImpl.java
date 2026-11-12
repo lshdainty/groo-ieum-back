@@ -1,5 +1,6 @@
 package io.groo.ieum.permission.service;
 
+import io.groo.core.exception.BusinessRuleViolationException;
 import io.groo.core.exception.DuplicateException;
 import io.groo.core.exception.EntityNotFoundException;
 import io.groo.core.exception.ErrorCode;
@@ -32,6 +33,13 @@ public class RoleServiceImpl implements RoleService {
     private final RoleRepository roleRepository;
     private final PermissionRepository permissionRepository;
     private final TokenRevocationService tokenRevocationService;
+
+    /**
+     * 시스템 필수 역할 · 권한 — 지우면 역할 · 권한을 고칠 수 있는 사람이 남지 않아 SQL 로만 복구된다
+     * (#78 이후 삭제가 실제로 가진 사람에게서 회수되므로). ADMIN 역할은 ROLE:MANAGE 를 늘 가져야 한다(보안 점검 IEU-5)
+     */
+    static final String SYSTEM_ADMIN_ROLE = "ADMIN";
+    static final String ROLE_MANAGE_PERMISSION = "ROLE:MANAGE";
 
     /** 역할 이름 최대 길이 — roles.role_name 칸(length 20) */
     static final int ROLE_NAME_MAX = 20;
@@ -108,6 +116,7 @@ public class RoleServiceImpl implements RoleService {
     @Transactional
     public void updateRoleWithPermissions(String roleCode, String name, String desc, List<String> permissionCodes) {
         log.debug("역할 수정 (권한 포함) 시작: roleCode={}", roleCode);
+        requireAdminKeepsRoleManage(roleCode, permissionCodes);
         Role role = getRole(roleCode);
 
         List<Permission> permissions = permissionCodes.stream()
@@ -149,6 +158,7 @@ public class RoleServiceImpl implements RoleService {
     @Transactional
     public void updateRolePermissions(String roleCode, List<String> permissionCodes) {
         log.debug("역할 권한 수정 시작: roleCode={}", roleCode);
+        requireAdminKeepsRoleManage(roleCode, permissionCodes);
         Role role = getRole(roleCode);
 
         List<Permission> permissions = permissionCodes.stream()
@@ -184,6 +194,10 @@ public class RoleServiceImpl implements RoleService {
     @Transactional
     public void removePermissionFromRole(String roleCode, String permissionCode) {
         log.debug("역할에서 권한 제거 시작: roleCode={}, permissionCode={}", roleCode, permissionCode);
+        if (SYSTEM_ADMIN_ROLE.equals(roleCode) && ROLE_MANAGE_PERMISSION.equals(permissionCode)) {
+            log.warn("권한 제거 거부 - 관리자 역할의 역할 관리 권한");
+            throw new BusinessRuleViolationException(HrErrorCode.SYSTEM_ROLE_PROTECTED);
+        }
         Role role = getRole(roleCode);
         Permission permission = permissionRepository.findByCode(permissionCode)
                 .orElseThrow(() -> {
@@ -200,6 +214,10 @@ public class RoleServiceImpl implements RoleService {
     @Transactional
     public void deleteRole(String roleCode) {
         log.debug("역할 삭제 시작: roleCode={}", roleCode);
+        if (SYSTEM_ADMIN_ROLE.equals(roleCode)) {
+            log.warn("역할 삭제 거부 - 시스템 필수 역할: roleCode={}", roleCode);
+            throw new BusinessRuleViolationException(HrErrorCode.SYSTEM_ROLE_PROTECTED);
+        }
         Role role = roleRepository.findByCode(roleCode)
                 .orElseThrow(() -> {
                     log.warn("역할 삭제 실패 - 존재하지 않는 역할: roleCode={}", roleCode);
@@ -269,6 +287,10 @@ public class RoleServiceImpl implements RoleService {
     @Transactional
     public void deletePermission(String permissionCode) {
         log.debug("권한 삭제 시작: permissionCode={}", permissionCode);
+        if (ROLE_MANAGE_PERMISSION.equals(permissionCode)) {
+            log.warn("권한 삭제 거부 - 시스템 필수 권한: permissionCode={}", permissionCode);
+            throw new BusinessRuleViolationException(HrErrorCode.SYSTEM_ROLE_PROTECTED);
+        }
         Permission permission = permissionRepository.findByCode(permissionCode)
                 .orElseThrow(() -> {
                     log.warn("권한 삭제 실패 - 존재하지 않는 권한: permissionCode={}", permissionCode);
@@ -302,5 +324,13 @@ public class RoleServiceImpl implements RoleService {
     private void revokeHolders(Role role) {
         roleRepository.findActiveUserRolesByRole(role)
                 .forEach(grant -> tokenRevocationService.revokeAllForUser(grant.getUser().getId()));
+    }
+
+    /** 관리자 역할의 권한 목록을 통째로 바꿀 때 역할 관리 권한이 빠지면 거절한다 */
+    private static void requireAdminKeepsRoleManage(String roleCode, List<String> permissionCodes) {
+        if (SYSTEM_ADMIN_ROLE.equals(roleCode) && permissionCodes != null && !permissionCodes.contains(ROLE_MANAGE_PERMISSION)) {
+            log.warn("역할 권한 수정 거부 - 관리자 역할에서 역할 관리 권한을 뺌");
+            throw new BusinessRuleViolationException(HrErrorCode.SYSTEM_ROLE_PROTECTED);
+        }
     }
 }

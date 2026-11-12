@@ -94,6 +94,7 @@ public enum HrErrorCode implements ErrorCodeProvider {
     ROLE_ALREADY_EXISTS("PERMISSION_003", "error.role.already.exists", HttpStatus.CONFLICT),
     PERMISSION_NOT_FOUND("PERMISSION_004", "error.notfound.permission", HttpStatus.NOT_FOUND),
     PERMISSION_ALREADY_EXISTS("PERMISSION_005", "error.permission.already.exists", HttpStatus.CONFLICT),
+    SYSTEM_ROLE_PROTECTED("PERMISSION_006", "error.permission.system.protected", HttpStatus.CONFLICT),
 
     // ========================================
     // DUES (회비)

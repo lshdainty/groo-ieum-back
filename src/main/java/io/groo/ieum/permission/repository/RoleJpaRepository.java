@@ -36,8 +36,8 @@ public class RoleJpaRepository implements RoleRepository {
                 "select distinct r from Role r " +
                 "left join fetch r.rolePermissions rp " +
                 "left join fetch rp.permission p " +
-                "where r.code = :code and r.isDeleted = :isDeleted " +
-                "and (rp.isDeleted = :isDeleted or rp is null)", Role.class)
+                // 매핑 삭제 여부로 거르지 않는다 — 권한 0개가 된 역할이 사라지지 않게(Role.getPermissions 가 거른다)
+                "where r.code = :code and r.isDeleted = :isDeleted", Role.class)
                 .setParameter("code", code)
                 .setParameter("isDeleted", YNType.N)
                 .getResultList();
@@ -51,7 +51,6 @@ public class RoleJpaRepository implements RoleRepository {
                 "left join fetch r.rolePermissions rp " +
                 "left join fetch rp.permission p " +
                 "where r.isDeleted = :isDeleted " +
-                "and (rp.isDeleted = :isDeleted or rp is null) " +
                 "order by r.code asc", Role.class)
                 .setParameter("isDeleted", YNType.N)
                 .getResultList();
