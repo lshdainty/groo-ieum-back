@@ -38,7 +38,9 @@ public class CalendarApiController implements CalendarApi {
     @Override
     @PreAuthorize("hasAnyAuthority('SCHEDULE:READ', 'VACATION:READ')")
     public ApiResponse searchEventsByPeriod(LocalDateTime startDate, LocalDateTime endDate, @LoginUser User loginUser) {
-        boolean canSeeAllReasons = hasAnyAuthority("VACATION:MANAGE", "VACATION:APPROVE");
+        // 남의 휴가 사유는 휴가 관리 권한자만 본다 — 승인 권한은 결재선과 무관하게 전 직원에게 걸려 있어
+        // 캘린더 사유까지 열면 승인자가 전 직원의 사유를 읽는다(보안 점검 IEU-8). 승인자의 다른 열람 범위는 그대로다
+        boolean canSeeAllReasons = hasAnyAuthority("VACATION:MANAGE");
         List<CalendarApiDto.searchEventsByPeriodResp> resp = new ArrayList<>();
 
         List<Schedule> schedules = hasAnyAuthority("SCHEDULE:READ")
@@ -68,7 +70,7 @@ public class CalendarApiController implements CalendarApi {
                         v.getUser().getName(),
                         getTranslatedName(v.getTimeType()),
                         v.getTimeType().name(),
-                        // 남의 휴가는 종류만 보이고 사유는 본인 · 휴가 관리 · 휴가 승인 권한자에게만 내린다
+                        // 남의 휴가는 종류만 보이고 사유는 본인 · 휴가 관리 권한자에게만 내린다
                         canSeeAllReasons || v.getUser().getId().equals(loginUser.getId()) ? v.getDesc() : null,
                         v.getStartDate(),
                         v.getEndDate(),
