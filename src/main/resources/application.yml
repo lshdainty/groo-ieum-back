@@ -168,6 +168,8 @@ springdoc:
 jwt:
   hr-secret: ${JWT_HR_SECRET}
   hr-access-expiration: ${JWT_HR_ACCESS_EXPIRATION:3600000}
+  # HR 토큰 절대 수명 — SSO 로그인부터 30일이 지나면 쓰는 중이어도 갱신하지 않고 다시 로그인하게 한다(보안 점검 M-1)
+  hr-absolute-lifetime: ${JWT_HR_ABSOLUTE_LIFETIME:2592000000}
   # SSO 토큰(RS256) 검증용 JWKS — SSO base URL + /.well-known/jwks.json (시작 시 fetch 안 함, 첫 검증 시 fetch·캐시)
   sso-jwks-uri: ${SSO_JWKS_URI:${SSO_API_URL:http://localhost:8000}/.well-known/jwks.json}
 

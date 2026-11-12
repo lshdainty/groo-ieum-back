@@ -319,6 +319,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         // (남은 수명 10분 안에 만료), 바뀐 역할 · 권한은 새 토큰에 반영한다.
         // 조회 실패가 이번 요청의 인증까지 깨지 않도록 예외는 여기서 삼킨다.
         String userId = jwtTokenProvider.getUserId(token);
+        // 절대 수명 — SSO 로그인부터 30일이 지나면 쓰는 중이어도 갱신하지 않는다(보안 점검 M-1). 갱신은 이음 DB 만
+        // 보므로, SSO 에서 놓친 폐기 · 삭제(이벤트 유실)가 끝없이 전파되지 않았다. 다시 로그인하면 SSO 가 지금 상태를 본다.
+        java.util.Date authTime = jwtTokenProvider.getHrAuthTime(token);
+        if (authTime == null
+                || System.currentTimeMillis() - authTime.getTime() > jwtProperties.getHrAbsoluteLifetime()) {
+            log.info("HR 토큰 절대 수명 초과 — 갱신하지 않는다(다시 로그인): userId={}", userId);
+            return;
+        }
         User user;
         try {
             user = findLinkedHrUser(userId, jwtTokenProvider.getSsoUserRowIdFromHrToken(token));
@@ -327,8 +335,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             return;
         }
         List<String> roles = user.getRoles().stream().map(Role::getCode).collect(Collectors.toList());
-        String renewed = jwtTokenProvider.createHrAccessToken(
-                user, roles, user.getAllAuthorities(), passwordChangeRequired);  // 표식은 옛 토큰에서 옮겨 싣는다
+        String renewed = jwtTokenProvider.createHrAccessToken(user.getId(), user.getSsoUserRowId(),
+                user.getName(), user.getEmail(), roles, user.getAllAuthorities(),
+                passwordChangeRequired, authTime);  // 표식 · 로그인 시각은 옛 토큰에서 옮겨 싣는다
         // TokenExchangeController.setAccessTokenCookie 와 같은 속성 — 로그인이 심는 쿠키를
         // 그대로 대체해야 두 쿠키가 병존하지 않는다.
         ResponseCookie cookie = ResponseCookie.from(ACCESS_TOKEN_COOKIE, renewed)
