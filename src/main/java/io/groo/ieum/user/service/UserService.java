@@ -39,14 +39,18 @@ public interface UserService {
     /**
      * 사용자 정보 수정
      *
-     * 대상이 로그인 유저가 아니거나, 역할(roleNames)이 현재와 달라지는 요청은
-     * canManage 일 때만 허용한다. 아니면 PERMISSION_DENIED 로 거절하고 아무것도 바꾸지 않는다.
+     * 대상이 로그인 유저가 아니거나 소속이 현재와 달라지는 요청은 canManage 일 때만,
+     * 역할(roleNames)이 현재와 달라지는 요청은 canManageRoles 일 때만 허용한다.
+     * 아니면 PERMISSION_DENIED 로 거절하고 아무것도 바꾸지 않는다.
+     * 역할 부여는 사용자 관리 권한과 분리한다 — 사용자 관리만 가진 역할(예: 인사 담당)이
+     * 자신이나 남에게 관리자 역할을 붙이지 못하게(보안 점검 IEU-7)
      *
      * @param data 수정할 사용자 정보
      * @param loginUserId 로그인한 사용자 ID
      * @param canManage 사용자 관리 권한(USER:MANAGE 또는 ROLE:MANAGE) 여부
+     * @param canManageRoles 역할 관리 권한(ROLE:MANAGE) 여부
      */
-    void editUser(UserServiceDto data, String loginUserId, boolean canManage);
+    void editUser(UserServiceDto data, String loginUserId, boolean canManage, boolean canManageRoles);
 
     /**
      * 사용자 삭제 (소프트 삭제)

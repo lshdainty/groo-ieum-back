@@ -225,7 +225,8 @@ public class UserApiController implements UserApi {
                 .countryCode(data.getCountryCode())
                 .build(),
                 loginUser.getId(),
-                hasUserManageAuthority()
+                hasUserManageAuthority(),
+                hasAuthority("ROLE:MANAGE")
         );
 
         UserServiceDto findUser = userService.searchUser(userId);

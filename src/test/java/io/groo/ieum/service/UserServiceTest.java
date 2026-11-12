@@ -519,7 +519,7 @@ class UserServiceTest {
                     .build();
 
             // when
-            userService.editUser(data, "user1", false);
+            userService.editUser(data, "user1", false, false);
 
             // then
             then(userRepository).should().findById(userId);
@@ -536,7 +536,7 @@ class UserServiceTest {
             given(userRepository.findById("user1")).willReturn(Optional.of(user));
 
             userService.editUser(UserServiceDto.builder().id("user1").name("이하은")
-                    .profileDeleteYN(YNType.Y).build(), "user1", false);
+                    .profileDeleteYN(YNType.Y).build(), "user1", false, false);
 
             assertThat(user.getProfileName()).isNull();
             assertThat(user.getProfileUUID()).isNull();
@@ -553,7 +553,7 @@ class UserServiceTest {
 
             userService.editUser(UserServiceDto.builder().id("user1")
                     .profileUUID("uuid-2").profileUrl("/upload/temp/profile/x.png")
-                    .profileDeleteYN(YNType.Y).build(), "user1", false);
+                    .profileDeleteYN(YNType.Y).build(), "user1", false, false);
 
             assertThat(user.getProfileName()).isNull();
             assertThat(user.getProfileUUID()).isNull();
@@ -567,8 +567,8 @@ class UserServiceTest {
                     LocalDate.now(), YNType.N, "me.png", "uuid-1", CountryCode.KR);
             given(userRepository.findById("user1")).willReturn(Optional.of(user));
 
-            userService.editUser(UserServiceDto.builder().id("user1").name("이하은").build(), "user1", false);
-            userService.editUser(UserServiceDto.builder().id("user1").profileDeleteYN(YNType.N).build(), "user1", false);
+            userService.editUser(UserServiceDto.builder().id("user1").name("이하은").build(), "user1", false, false);
+            userService.editUser(UserServiceDto.builder().id("user1").profileDeleteYN(YNType.N).build(), "user1", false, false);
 
             assertThat(user.getProfileName()).isEqualTo("me.png");
             assertThat(user.getProfileUUID()).isEqualTo("uuid-1");
@@ -584,12 +584,16 @@ class UserServiceTest {
             UserServiceDto data = UserServiceDto.builder().id(userId).build();
 
             // when & then
-            assertThatThrownBy(() -> userService.editUser(data, "user1", false))
+            assertThatThrownBy(() -> userService.editUser(data, "user1", false, false))
                     .isInstanceOf(EntityNotFoundException.class);
         }
 
         private void assertEditDenied(UserServiceDto data, String loginUserId, boolean canManage) {
-            assertThatThrownBy(() -> userService.editUser(data, loginUserId, canManage))
+            assertEditDenied(data, loginUserId, canManage, canManage);
+        }
+
+        private void assertEditDenied(UserServiceDto data, String loginUserId, boolean canManage, boolean canManageRoles) {
+            assertThatThrownBy(() -> userService.editUser(data, loginUserId, canManage, canManageRoles))
                     .isInstanceOf(ForbiddenException.class)
                     .extracting(e -> ((ForbiddenException) e).getErrorCode().getCode())
                     .isEqualTo("PERMISSION_001");
@@ -638,7 +642,7 @@ class UserServiceTest {
         void editUserSuccessSelfSameCompany() {
             User user = createTestUser("user1", "이서준", "user1@test.com");
             given(userRepository.findById("user1")).willReturn(Optional.of(user));
-            userService.editUser(UserServiceDto.builder().id("user1").name("이하은").company("NONE").build(), "user1", false);
+            userService.editUser(UserServiceDto.builder().id("user1").name("이하은").company("NONE").build(), "user1", false, false);
             assertThat(user.getName()).isEqualTo("이하은");
             assertThat(user.getCompany()).isEqualTo("NONE");
         }
@@ -649,7 +653,7 @@ class UserServiceTest {
             User user = createTestUser("user1", "이서준", "user1@test.com");
             given(userRepository.findById("user1")).willReturn(Optional.of(user));
             assertThatThrownBy(() -> userService.editUser(
-                    UserServiceDto.builder().id("user1").company("System").build(), "admin", true))
+                    UserServiceDto.builder().id("user1").company("System").build(), "admin", true, true))
                     .isInstanceOf(io.groo.core.exception.InvalidValueException.class);
             assertThat(user.getCompany()).isEqualTo("NONE");
         }
@@ -659,7 +663,7 @@ class UserServiceTest {
         void editUserSuccessManagerCompanyChange() {
             User user = createTestUser("user1", "이서준", "user1@test.com");
             given(userRepository.findById("user1")).willReturn(Optional.of(user));
-            userService.editUser(UserServiceDto.builder().id("user1").company("OTHER").build(), "admin", true);
+            userService.editUser(UserServiceDto.builder().id("user1").company("OTHER").build(), "admin", true, true);
             assertThat(user.getCompany()).isEqualTo("OTHER");
         }
 
@@ -670,7 +674,7 @@ class UserServiceTest {
                     LocalDate.of(1990, 1, 1), "SYSTEM", "9 ~ 18",
                     LocalDate.now(), YNType.N, null, null, CountryCode.KR);
             given(userRepository.findById("system")).willReturn(Optional.of(user));
-            userService.editUser(UserServiceDto.builder().id("system").name("시스템2").company("SYSTEM").build(), "system", false);
+            userService.editUser(UserServiceDto.builder().id("system").name("시스템2").company("SYSTEM").build(), "system", false, false);
             assertThat(user.getName()).isEqualTo("시스템2");
         }
 
@@ -679,8 +683,39 @@ class UserServiceTest {
         void editUserSuccessSelfSameRoles() {
             User user = createTestUser("user1", "이서준", "user1@test.com");
             given(userRepository.findById("user1")).willReturn(Optional.of(user));
-            userService.editUser(UserServiceDto.builder().id("user1").name("이하은").roleNames(List.of()).build(), "user1", false);
+            userService.editUser(UserServiceDto.builder().id("user1").name("이하은").roleNames(List.of()).build(), "user1", false, false);
             assertThat(user.getName()).isEqualTo("이하은");
+        }
+
+        @Test
+        @DisplayName("실패 - 사용자 관리 권한만으로는 자기에게 관리자 역할을 붙이지 못한다 (IEU-7)")
+        void editUserFailUserManagerSelfAdminRole() {
+            User user = createTestUser("hr1", "인사담당", "hr1@test.com");
+            given(userRepository.findById("hr1")).willReturn(Optional.of(user));
+            assertEditDenied(UserServiceDto.builder().id("hr1").roleNames(List.of("ADMIN")).build(), "hr1", true, false);
+            assertThat(user.getRoles()).isEmpty();
+            then(roleRepository).shouldHaveNoInteractions();
+        }
+
+        @Test
+        @DisplayName("실패 - 사용자 관리 권한만으로는 남의 역할도 바꾸지 못한다 (IEU-7)")
+        void editUserFailUserManagerOtherRole() {
+            User user = createTestUser("user1", "이서준", "user1@test.com");
+            given(userRepository.findById("user1")).willReturn(Optional.of(user));
+            assertEditDenied(UserServiceDto.builder().id("user1").name("바꿈").roleNames(List.of("ADMIN")).build(), "hr1", true, false);
+            assertThat(user.getName()).isEqualTo("이서준");
+            assertThat(user.getRoles()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("성공 - 사용자 관리 권한만 있어도 역할을 건드리지 않으면(안 보내거나 같은 목록) 남의 정보를 고친다")
+        void editUserSuccessUserManagerWithoutRoleChange() {
+            User user = createTestUser("user1", "이서준", "user1@test.com");
+            given(userRepository.findById("user1")).willReturn(Optional.of(user));
+            userService.editUser(UserServiceDto.builder().id("user1").name("이하은").build(), "hr1", true, false);
+            userService.editUser(UserServiceDto.builder().id("user1").workTime("10 ~ 19").roleNames(List.of()).build(), "hr1", true, false);
+            assertThat(user.getName()).isEqualTo("이하은");
+            assertThat(user.getWorkTime()).isEqualTo("10 ~ 19");
         }
 
         @Test
@@ -690,7 +725,7 @@ class UserServiceTest {
             given(userRepository.findById("user1")).willReturn(Optional.of(user));
             Role role = Role.createRole("ADMIN", "관리자", "관리자 역할");
             given(roleRepository.findByCode("ADMIN")).willReturn(Optional.of(role));
-            userService.editUser(UserServiceDto.builder().id("user1").name("이하은").roleNames(List.of("ADMIN")).build(), "admin", true);
+            userService.editUser(UserServiceDto.builder().id("user1").name("이하은").roleNames(List.of("ADMIN")).build(), "admin", true, true);
             assertThat(user.getName()).isEqualTo("이하은");
             assertThat(user.getRoles()).contains(role);
         }
@@ -709,7 +744,7 @@ class UserServiceTest {
                     .build();
 
             // when
-            userService.editUser(data, "user1", false);
+            userService.editUser(data, "user1", false, false);
 
             // then
             then(userRepository).should().findById(userId);
@@ -733,7 +768,7 @@ class UserServiceTest {
                     .build();
 
             // when
-            userService.editUser(data, "admin", true);
+            userService.editUser(data, "admin", true, true);
 
             // then
             then(userRepository).should().findById(userId);
@@ -750,7 +785,7 @@ class UserServiceTest {
 
             UserServiceDto data = UserServiceDto.builder().id("user1").roleNames(List.of("SECRET_ROLE_X")).build();
 
-            org.assertj.core.api.Assertions.assertThatThrownBy(() -> userService.editUser(data, "admin", true))
+            org.assertj.core.api.Assertions.assertThatThrownBy(() -> userService.editUser(data, "admin", true, true))
                     .isInstanceOf(io.groo.core.exception.EntityNotFoundException.class)
                     .satisfies(e -> assertThat(e.getMessage()).doesNotContain("SECRET_ROLE_X"));
         }
