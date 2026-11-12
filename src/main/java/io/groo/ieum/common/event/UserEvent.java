@@ -23,5 +23,7 @@ public class UserEvent {
     private String userId;
     private String name;
     private String email;
+    /** USER_LINKED 에서만 — 합쳐져 사라진 초대 대기 계정 번호 */
+    private Long previousUserNo;
     private LocalDateTime timestamp;
 }
