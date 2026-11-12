@@ -167,6 +167,69 @@ class WorkHistoryServiceTest {
         }
 
         @Test
+        @DisplayName("보안 점검 IEU-8 - 기간 없이 부르면 오늘까지 최근 1년으로 묶는다")
+        void findAllWorkHistoriesDefaultsToOneYear() {
+            WorkHistorySearchCondition condition = new WorkHistorySearchCondition();
+            given(workHistoryRepository.findAll(condition)).willReturn(List.of());
+
+            workHistoryService.findAllWorkHistories(condition);
+
+            LocalDate today = companyClock.today();
+            assertThat(condition.getEndDate()).isEqualTo(today);
+            assertThat(condition.getStartDate()).isEqualTo(today.minusYears(1).plusDays(1));
+        }
+
+        @Test
+        @DisplayName("보안 점검 IEU-8 - 한쪽 끝만 오면 다른 끝을 1년 폭으로 채운다")
+        void findAllWorkHistoriesFillsOpenEnd() {
+            WorkHistorySearchCondition onlyStart = new WorkHistorySearchCondition();
+            onlyStart.setStartDate(LocalDate.of(2026, 3, 1));
+            WorkHistorySearchCondition onlyEnd = new WorkHistorySearchCondition();
+            onlyEnd.setEndDate(LocalDate.of(2026, 3, 1));
+            given(workHistoryRepository.findAll(any())).willReturn(List.of());
+
+            workHistoryService.findAllWorkHistories(onlyStart);
+            workHistoryService.findAllWorkHistories(onlyEnd);
+
+            assertThat(onlyStart.getEndDate()).isEqualTo(LocalDate.of(2027, 2, 28));
+            assertThat(onlyEnd.getStartDate()).isEqualTo(LocalDate.of(2025, 3, 2));
+        }
+
+        @Test
+        @DisplayName("보안 점검 IEU-8 - 1년 이상 · 거꾸로인 기간은 조회하지 않고 거절한다")
+        void findAllWorkHistoriesRejectsTooLongOrReversed() {
+            WorkHistorySearchCondition tooLong = new WorkHistorySearchCondition();
+            tooLong.setStartDate(LocalDate.of(2000, 1, 1));
+            tooLong.setEndDate(LocalDate.of(2026, 1, 1));
+            WorkHistorySearchCondition oneYear = new WorkHistorySearchCondition();
+            oneYear.setStartDate(LocalDate.of(2026, 1, 1));
+            oneYear.setEndDate(LocalDate.of(2027, 1, 1));
+            WorkHistorySearchCondition reversed = new WorkHistorySearchCondition();
+            reversed.setStartDate(LocalDate.of(2026, 3, 2));
+            reversed.setEndDate(LocalDate.of(2026, 3, 1));
+
+            for (WorkHistorySearchCondition c : List.of(tooLong, oneYear, reversed)) {
+                assertThatThrownBy(() -> workHistoryService.findAllWorkHistories(c))
+                        .isInstanceOf(InvalidValueException.class);
+            }
+            then(workHistoryRepository).shouldHaveNoInteractions();
+        }
+
+        @Test
+        @DisplayName("보안 점검 IEU-8 - 1년 하루 전까지(예: 1월 1일 ~ 12월 31일)는 그대로 조회한다")
+        void findAllWorkHistoriesAllowsJustUnderOneYear() {
+            WorkHistorySearchCondition condition = new WorkHistorySearchCondition();
+            condition.setStartDate(LocalDate.of(2026, 1, 1));
+            condition.setEndDate(LocalDate.of(2026, 12, 31));
+            given(workHistoryRepository.findAll(condition)).willReturn(List.of());
+
+            workHistoryService.findAllWorkHistories(condition);
+
+            then(workHistoryRepository).should().findAll(condition);
+            assertThat(condition.getStartDate()).isEqualTo(LocalDate.of(2026, 1, 1));
+        }
+
+        @Test
         @DisplayName("성공 - 업무 이력이 없으면 빈 리스트를 반환한다")
         void findAllWorkHistoriesEmpty() {
             // given
