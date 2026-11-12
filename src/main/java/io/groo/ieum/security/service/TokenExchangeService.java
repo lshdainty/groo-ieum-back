@@ -72,7 +72,7 @@ public class TokenExchangeService {
         if (user != null && user.isLinkedToSsoUser(ssoUserNo)) {
             return user;
         }
-        List<Long> previous = ssoApiClient.getLinkedFrom(ssoUserNo);
+        List<Long> previous = deletedPendingOnly(ssoApiClient.getLinkedFrom(ssoUserNo));
         if (!previous.isEmpty() && userService.relinkMergedSsoUser(ssoUserNo, previous, userId,
                 jwtTokenProvider.getNameFromSsoToken(ssoToken), jwtTokenProvider.getEmailFromSsoToken(ssoToken))) {
             User relinked = userService.findUserById(userId);
@@ -85,6 +85,31 @@ public class TokenExchangeService {
         }
         log.warn("토큰 교환 거부 - SSO 사용자 번호와 이음 연결 번호 불일치: userId={}", userId);
         throw new UnauthorizedException(ErrorCode.UNAUTHORIZED);
+    }
+
+    /**
+     * 다시 묶어도 되는 번호만 — 초대 대기 계정이었던(합쳐지며 SSO 에서 지워진) 번호(보안 점검 SSO-13).
+     *
+     * <p>이음 행에는 초대 상태가 없다. 초대 수락은 SSO 의 대기 계정을 지우므로, "그 번호의 SSO 계정이 더는 없다" 가
+     * 대기 행이었다는 증거다. SSO 에 아직 있는 계정(관리자 등 살아 있는 계정)의 행은 합침 기록에 있더라도 묶지 않는다 —
+     * 기록이 위조돼도 남의 행을 가져가지 못하게. 확인하지 못하면(SSO 오류) 묶지 않는다.
+     */
+    private List<Long> deletedPendingOnly(List<Long> previous) {
+        if (previous == null || previous.isEmpty()) {
+            return List.of();
+        }
+        try {
+            java.util.Set<Long> stillThere = ssoApiClient.getInvitationStatus(previous).stream()
+                    .map(io.groo.ieum.client.sso.dto.SsoInvitationStatusResponse::getUserNo)
+                    .collect(Collectors.toSet());
+            if (!stillThere.isEmpty()) {
+                log.warn("재연결 후보 중 SSO 에 살아 있는 계정은 뺀다: {}", stillThere);
+            }
+            return previous.stream().filter(no -> !stillThere.contains(no)).toList();
+        } catch (Exception e) {
+            log.warn("재연결 후보 확인 실패 — 다시 묶지 않는다: {}", e.getMessage());
+            return List.of();
+        }
     }
 
     /**

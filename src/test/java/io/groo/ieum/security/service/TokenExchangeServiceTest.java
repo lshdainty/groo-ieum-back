@@ -169,4 +169,35 @@ class TokenExchangeServiceTest {
 
         verify(ssoApiClient, org.mockito.Mockito.never()).getLinkedFrom(any());
     }
+
+    @Test
+    @DisplayName("보안 점검 SSO-13 - 합침 기록에 있어도 SSO 에 살아 있는 계정(관리자 등)의 행은 다시 묶지 않는다")
+    void doesNotRelinkLiveAccountRow() {
+        givenSsoToken("attacker", 1L);
+        given(userService.findUserById("attacker"))
+                .willThrow(new io.groo.core.exception.EntityNotFoundException(io.groo.ieum.common.exception.HrErrorCode.USER_NOT_FOUND));
+        given(ssoApiClient.getLinkedFrom(1L)).willReturn(List.of(7L));
+        io.groo.ieum.client.sso.dto.SsoInvitationStatusResponse admin =
+                mock(io.groo.ieum.client.sso.dto.SsoInvitationStatusResponse.class);
+        given(admin.getUserNo()).willReturn(7L);
+        given(ssoApiClient.getInvitationStatus(List.of(7L))).willReturn(List.of(admin));
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> sut.exchange("ssoToken"))
+                .isInstanceOf(io.groo.core.exception.EntityNotFoundException.class);
+        verify(userService, org.mockito.Mockito.never()).relinkMergedSsoUser(any(), anyList(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("보안 점검 SSO-13 - 대기 계정 여부를 확인하지 못하면(SSO 오류) 다시 묶지 않는다")
+    void doesNotRelinkWhenStatusUnknown() {
+        givenSsoToken("boss", 1L);
+        given(userService.findUserById("boss"))
+                .willThrow(new io.groo.core.exception.EntityNotFoundException(io.groo.ieum.common.exception.HrErrorCode.USER_NOT_FOUND));
+        given(ssoApiClient.getLinkedFrom(1L)).willReturn(List.of(101L));
+        given(ssoApiClient.getInvitationStatus(List.of(101L))).willThrow(new RuntimeException("SSO down"));
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> sut.exchange("ssoToken"))
+                .isInstanceOf(io.groo.core.exception.EntityNotFoundException.class);
+        verify(userService, org.mockito.Mockito.never()).relinkMergedSsoUser(any(), anyList(), any(), any(), any());
+    }
 }
