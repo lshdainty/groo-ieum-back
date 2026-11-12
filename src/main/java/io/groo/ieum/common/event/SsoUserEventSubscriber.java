@@ -34,11 +34,13 @@ public class SsoUserEventSubscriber {
     private final ObjectMapper objectMapper;
     private final TokenRevocationService tokenRevocationService;
     private final SsoEventVerifier ssoEventVerifier;
+    private final SsoUserUpdateOrder updateOrder;
 
     public SsoUserEventSubscriber(UserRepository userRepository, TokenRevocationService tokenRevocationService,
-                                  SsoEventVerifier ssoEventVerifier) {
+                                  SsoEventVerifier ssoEventVerifier, SsoUserUpdateOrder updateOrder) {
         this.userRepository = userRepository;
         this.ssoEventVerifier = ssoEventVerifier;
+        this.updateOrder = updateOrder;
         this.objectMapper = JsonMapper.builder().build();
         this.tokenRevocationService = tokenRevocationService;
     }
@@ -101,6 +103,12 @@ public class SsoUserEventSubscriber {
     private void handleUserUpdated(UserEvent event) {
         log.info("Processing USER_UPDATED event: ssoUserRowId={}, userId={}", event.getUserNo(), event.getUserId());
 
+        // 이미 적용한 변경보다 이른 변경은 버린다 — 늦게 도착한 옛 값이 새 값을 덮지 않게(보안 점검 IEU-6 후속)
+        if (!updateOrder.isNotOlder(event.getUserNo(), event.getTimestamp())) {
+            log.warn("오래된 USER_UPDATED — 버린다: ssoUserRowId={}, changedAt={}", event.getUserNo(), event.getTimestamp());
+            return;
+        }
+
         Optional<User> userOpt = userRepository.findBySsoUserRowId(event.getUserNo());
         if (userOpt.isEmpty()) {
             log.warn("User not found in HR for update: ssoUserRowId={}", event.getUserNo());
@@ -108,6 +116,7 @@ public class SsoUserEventSubscriber {
         }
 
         syncSsoFields(userOpt.get(), event);
+        updateOrder.applied(event.getUserNo(), event.getTimestamp());
         log.info("User updated from SSO event: ssoUserRowId={}", event.getUserNo());
     }
 

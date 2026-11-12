@@ -77,7 +77,7 @@ class SsoEventSignatureWiringTest {
         RSAKey attacker = new RSAKeyGenerator(2048).keyID("k1").generate();
         SsoEventSigner forger = new SsoEventSigner(attacker.toRSAPrivateKey(), "k1");
         var session = new SsoSessionEventSubscriber(userRepository, tokenRevocationService, verifier(false));
-        var user = new SsoUserEventSubscriber(userRepository, tokenRevocationService, verifier(false));
+        var user = new SsoUserEventSubscriber(userRepository, tokenRevocationService, verifier(false), new SsoUserUpdateOrder(org.mockito.Mockito.mock(org.springframework.data.redis.core.StringRedisTemplate.class)));
 
         session.handleSessionEvent(forger.sign(SsoEventSignature.SESSION_EVENTS_CHANNEL, SESSION));
         user.handleUserEvent(forger.sign(SsoEventSignature.USER_EVENTS_CHANNEL, DELETED));
@@ -89,10 +89,10 @@ class SsoEventSignatureWiringTest {
     @Test
     @DisplayName("서명 강제가 켜지면 서명 없는 이벤트는 처리하지 않는다 — 꺼져 있으면(전환 기간) 처리한다")
     void unsignedDependsOnFlag() throws Exception {
-        new SsoUserEventSubscriber(userRepository, tokenRevocationService, verifier(true)).handleUserEvent(DELETED);
+        new SsoUserEventSubscriber(userRepository, tokenRevocationService, verifier(true), new SsoUserUpdateOrder(org.mockito.Mockito.mock(org.springframework.data.redis.core.StringRedisTemplate.class))).handleUserEvent(DELETED);
         assertThat(kim.getIsDeleted()).isEqualTo(YNType.N);
 
-        new SsoUserEventSubscriber(userRepository, tokenRevocationService, verifier(false)).handleUserEvent(DELETED);
+        new SsoUserEventSubscriber(userRepository, tokenRevocationService, verifier(false), new SsoUserUpdateOrder(org.mockito.Mockito.mock(org.springframework.data.redis.core.StringRedisTemplate.class))).handleUserEvent(DELETED);
         assertThat(kim.getIsDeleted()).isEqualTo(YNType.Y);
     }
 }
