@@ -92,10 +92,12 @@ public interface DepartmentRepository {
     List<Department> findByUserIds(List<String> userIds);
 
     /**
-     * 특정 유저의 승인권자 목록 조회 (상위 부서장들)
+     * 특정 유저의 승인권자 목록 조회 (결재선)<br>
+     * 자기 부서의 부서장(본인이 아닐 때) + 상위 부서의 부서장들. 본인이 부서장인 부서와
+     * 같은 사람이 두 번 나오는 부서는 뺀다(보안 점검 IEU-8)
      *
      * @param userId 유저 ID
-     * @return List&lt;Department&gt;
+     * @return List&lt;Department&gt; 하위 부서부터 위로 올라가는 차례
      */
     List<Department> findApproversByUserId(String userId);
 }

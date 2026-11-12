@@ -13,8 +13,10 @@ import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Repository;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import static io.groo.ieum.department.domain.QDepartment.department;
 import static io.groo.ieum.department.domain.QUserDepartment.userDepartment;
@@ -168,11 +170,13 @@ public class DepartmentQueryDslRepository implements DepartmentRepository {
             return List.of();
         }
 
-        // 2. 상위 부서들을 재귀적으로 조회
+        // 2. 자기 부서의 부서장(본인이 아닐 때)부터 결재선에 넣는다
         List<Department> approverDepartments = new ArrayList<>();
+        Set<String> headIds = new HashSet<>();
         Department currentDept = userDept.getDepartment();
+        addApproverDepartment(approverDepartments, headIds, currentDept, userId);
 
-        // 현재 부서의 parent부터 시작하여 최상위 부서까지 조회
+        // 3. 현재 부서의 parent부터 시작하여 최상위 부서까지 조회
         while (currentDept != null && currentDept.getParentId() != null) {
             // parent 부서 조회
             Department parentDept = query
@@ -183,13 +187,24 @@ public class DepartmentQueryDslRepository implements DepartmentRepository {
                     )
                     .fetchOne();
 
-            if (parentDept != null && parentDept.getHeadUser() != null) {
-                approverDepartments.add(parentDept);
-            }
+            addApproverDepartment(approverDepartments, headIds, parentDept, userId);
 
             currentDept = parentDept;
         }
 
         return approverDepartments;
+    }
+
+    /** 부서장이 있고, 본인이 아니고, 아직 결재선에 없는 사람일 때만 넣는다 */
+    private static void addApproverDepartment(List<Department> approverDepartments, Set<String> headIds,
+                                              Department dept, String userId) {
+        if (dept == null || dept.getHeadUser() == null) {
+            return;
+        }
+        String headId = dept.getHeadUser().getId();
+        if (headId.equals(userId) || !headIds.add(headId)) {
+            return;
+        }
+        approverDepartments.add(dept);
     }
 }

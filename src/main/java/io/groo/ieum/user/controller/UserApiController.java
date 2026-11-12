@@ -373,12 +373,16 @@ public class UserApiController implements UserApi {
                 .collect(Collectors.toList());
 
         int maxAvailableCount = approverDetails.size();
-        boolean isAutoApproval = maxAvailableCount == 0;
+        // 결재선이 비면 최상위 부서장 본인만 자동 승인, 나머지는 결재선 없음(신청 거절) — 보안 점검 IEU-8
+        boolean topDepartmentHead = maxAvailableCount == 0 && userService.isTopDepartmentHead(userId);
+        boolean isAutoApproval = maxAvailableCount == 0 && topDepartmentHead;
+        boolean noApprovalLine = maxAvailableCount == 0 && !topDepartmentHead;
 
         return ApiResponse.success(new UserApiDto.GetApproversResp(
                 approverDetails,
                 maxAvailableCount,
-                isAutoApproval
+                isAutoApproval,
+                noApprovalLine
         ));
     }
 

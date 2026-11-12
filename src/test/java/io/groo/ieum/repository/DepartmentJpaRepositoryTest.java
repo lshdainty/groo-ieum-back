@@ -322,10 +322,39 @@ class DepartmentJpaRepositoryTest {
         // when
         List<Department> approvers = departmentRepository.findApproversByUserId("user1");
 
-        // then
-        assertThat(approvers).hasSize(2); // 팀, 본부
-        assertThat(approvers.get(0).getName()).isEqualTo("팀");
-        assertThat(approvers.get(1).getName()).isEqualTo("본부");
+        // then — 자기 부서장(파트)부터 위로 (보안 점검 IEU-8: 자기 부서장도 결재선에 든다)
+        assertThat(approvers).hasSize(3); // 파트, 팀, 본부
+        assertThat(approvers.get(0).getName()).isEqualTo("파트");
+        assertThat(approvers.get(1).getName()).isEqualTo("팀");
+        assertThat(approvers.get(2).getName()).isEqualTo("본부");
+    }
+
+    @Test
+    @DisplayName("결재선 - 본인이 부서장인 부서는 빼고, 같은 사람이 여러 부서장이면 한 번만 넣는다 (IEU-8)")
+    void findApproversByUserIdExcludesSelfAndDuplicateHeads() {
+        // given
+        User partHead = createTestUser("head3", "파트장", "head3@test.com");
+        User upperHead = createTestUser("head2", "팀장겸본부장", "head2@test.com");
+        em.persist(partHead);
+        em.persist(upperHead);
+
+        Department headquarters = Department.createDepartment("본부", "본부", null, upperHead, 1L, "본부", "#FF0000", company);
+        departmentRepository.save(headquarters);
+        Department team = Department.createDepartment("팀", "팀", headquarters, upperHead, 2L, "팀", "#00FF00", company);
+        departmentRepository.save(team);
+        Department part = Department.createDepartment("파트", "파트", team, partHead, 3L, "파트", "#0000FF", company);
+        departmentRepository.save(part);
+
+        departmentRepository.saveUserDepartment(UserDepartment.createUserDepartment(partHead, part, YNType.Y));
+        em.flush();
+        em.clear();
+
+        // when
+        List<Department> approvers = departmentRepository.findApproversByUserId("head3");
+
+        // then — 본인(파트장)은 빠지고, 팀장 겸 본부장은 한 번만
+        assertThat(approvers).hasSize(1);
+        assertThat(approvers.get(0).getHeadUser().getId()).isEqualTo("head2");
     }
 
     @Test
@@ -339,7 +368,7 @@ class DepartmentJpaRepositoryTest {
     }
 
     @Test
-    @DisplayName("최상위 부서인 경우 결재자가 없다")
+    @DisplayName("최상위 부서의 일반 구성원은 자기 부서장이 결재자다 (IEU-8)")
     void findApproversByUserIdTopLevel() {
         // given
         User user = createTestUser("user1", "테스트유저1", "user1@test.com");
@@ -358,7 +387,24 @@ class DepartmentJpaRepositoryTest {
         List<Department> approvers = departmentRepository.findApproversByUserId("user1");
 
         // then
-        assertThat(approvers).isEmpty();
+        assertThat(approvers).hasSize(1);
+        assertThat(approvers.get(0).getName()).isEqualTo("최상위");
+    }
+
+    @Test
+    @DisplayName("최상위 부서장 본인은 결재자가 없다")
+    void findApproversByUserIdTopLevelHead() {
+        // given
+        User head1 = createTestUser("head1", "부서장1", "head1@test.com");
+        em.persist(head1);
+        Department topDept = Department.createDepartment("최상위", "최상위", null, head1, 1L, "최상위", "#FF0000", company);
+        departmentRepository.save(topDept);
+        departmentRepository.saveUserDepartment(UserDepartment.createUserDepartment(head1, topDept, YNType.Y));
+        em.flush();
+        em.clear();
+
+        // when & then
+        assertThat(departmentRepository.findApproversByUserId("head1")).isEmpty();
     }
 
     @Test

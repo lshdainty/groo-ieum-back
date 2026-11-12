@@ -14,6 +14,7 @@ import io.groo.core.type.YNType;
 import io.groo.core.util.MessageResolver;
 import io.groo.core.util.FileUploadValidator;
 import io.groo.core.util.FileUtils;
+import io.groo.ieum.department.domain.UserDepartment;
 import io.groo.ieum.department.repository.DepartmentRepository;
 import io.groo.ieum.permission.domain.Role;
 import io.groo.ieum.permission.repository.RoleRepository;
@@ -450,6 +451,15 @@ public class UserServiceImpl implements UserService {
                 .id(user.getId())
                 .dashboard(user.getDashboard())
                 .build();
+    }
+
+    @Override
+    public boolean isTopDepartmentHead(String userId) {
+        return departmentRepository.findMainDepartmentByUserId(userId)
+                .map(UserDepartment::getDepartment)
+                .filter(dept -> dept.getParentId() == null)
+                .map(dept -> dept.getHeadUser() != null && userId.equals(dept.getHeadUser().getId()))
+                .orElse(false);
     }
 
     @Override
