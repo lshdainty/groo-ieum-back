@@ -255,21 +255,24 @@ public class UserServiceImpl implements UserService {
 
     @Override
     @Transactional
-    public void editUser(UserServiceDto data, String loginUserId, boolean canManage) {
+    public void editUser(UserServiceDto data, String loginUserId, boolean canManage, boolean canManageRoles) {
         log.debug("사용자 수정 시작: id={}", data.getId());
         User user = checkUserExist(data.getId());
+
+        // 역할 변경은 역할 관리 권한(ROLE:MANAGE)으로만 — 사용자 관리 권한만으로는 관리자 역할을 붙이지 못한다.
+        // 지금과 같은 역할 목록을 다시 보내는 것은 변경이 아니므로 통과한다
+        if (!canManageRoles && data.getRoleNames() != null) {
+            Set<String> current = user.getRoles().stream().map(Role::getCode).collect(Collectors.toSet());
+            if (!current.equals(new HashSet<>(data.getRoleNames()))) {
+                log.warn("역할 변경 접근 거부 - 로그인 유저: {}, 대상 유저: {}", loginUserId, data.getId());
+                throw new ForbiddenException(HrErrorCode.PERMISSION_DENIED);
+            }
+        }
 
         if (!canManage) {
             if (!user.getId().equals(loginUserId)) {
                 log.warn("사용자 수정 접근 거부 - 로그인 유저: {}, 대상 유저: {}", loginUserId, data.getId());
                 throw new ForbiddenException(HrErrorCode.PERMISSION_DENIED);
-            }
-            if (data.getRoleNames() != null) {
-                Set<String> current = user.getRoles().stream().map(Role::getCode).collect(Collectors.toSet());
-                if (!current.equals(new HashSet<>(data.getRoleNames()))) {
-                    log.warn("역할 변경 접근 거부 - 로그인 유저: {}, 대상 유저: {}", loginUserId, data.getId());
-                    throw new ForbiddenException(HrErrorCode.PERMISSION_DENIED);
-                }
             }
             // 소속은 관리 권한으로만 바꾼다 — 같은 값을 다시 보내는 것(프로필 저장)은 허용한다
             if (data.getCompany() != null && !data.getCompany().equals(user.getCompany())) {
