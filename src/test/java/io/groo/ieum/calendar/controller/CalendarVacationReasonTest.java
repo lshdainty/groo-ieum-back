@@ -79,10 +79,17 @@ class CalendarVacationReasonTest {
     }
 
     @Test
-    @DisplayName("공개 - 휴가 관리 · 휴가 승인 권한자는 남의 사유도 본다")
-    void managerAndApproverSeeReason() {
+    @DisplayName("공개 - 휴가 관리 권한자는 남의 사유도 본다")
+    void managerSeesReason() {
         assertThat(descByUser("VACATION:READ", "VACATION:MANAGE").get("other")).isEqualTo("남의 사유");
-        assertThat(descByUser("VACATION:READ", "VACATION:APPROVE").get("other")).isEqualTo("남의 사유");
+    }
+
+    @Test
+    @DisplayName("가림 - 보안 점검 IEU-8: 휴가 승인 권한자도 캘린더에서 남의 사유는 비어 있고 본인 사유는 보인다")
+    void approverDoesNotSeeOthersReason() {
+        Map<String, String> m = descByUser("VACATION:READ", "VACATION:APPROVE");
+        assertThat(m.get("other")).isNull();
+        assertThat(m.get("me")).isEqualTo("내 사유");
     }
 
     @Test
