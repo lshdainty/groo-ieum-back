@@ -64,4 +64,31 @@ class SsoApiClientResponseMessageTest {
                 .isInstanceOf(ExternalServiceException.class)
                 .satisfies(e -> assertThat(e.getMessage()).doesNotContain("internal-detail"));
     }
+
+    @Test
+    @DisplayName("보안 점검 SSO-13 - 초대 상태가 2xx 인데 본문이 비면 빈 목록이 아니라 실패다(재연결이 '모두 사라짐' 으로 읽지 않게)")
+    void emptyInvitationStatusBodyFails() {
+        server.expect(requestTo("http://sso.test/api/v1/users/invitation-status"))
+                .andRespond(withSuccess("", MediaType.APPLICATION_JSON));
+
+        assertThatThrownBy(() -> client.getInvitationStatus(java.util.List.of(7L)))
+                .isInstanceOf(ExternalServiceException.class);
+    }
+
+    @Test
+    @DisplayName("보안 점검 SSO-13 - data 가 없는 응답도 실패, 빈 목록([])은 정상 빈 결과")
+    void nullDataFailsButEmptyListOk() {
+        server.expect(requestTo("http://sso.test/api/v1/users/invitation-status"))
+                .andRespond(withSuccess("{\"success\":true,\"code\":\"OK\",\"message\":\"OK\"}", MediaType.APPLICATION_JSON));
+        assertThatThrownBy(() -> client.getInvitationStatus(java.util.List.of(7L)))
+                .isInstanceOf(ExternalServiceException.class);
+
+        server.reset();
+        server.expect(requestTo("http://sso.test/api/v1/oauth2/token"))
+                .andRespond(withSuccess(TOKEN_OK, MediaType.APPLICATION_JSON));
+        server.expect(requestTo("http://sso.test/api/v1/users/invitation-status"))
+                .andRespond(withSuccess("{\"success\":true,\"code\":\"OK\",\"message\":\"OK\",\"data\":[]}",
+                        MediaType.APPLICATION_JSON));
+        assertThat(client.getInvitationStatus(java.util.List.of(7L))).isEmpty();
+    }
 }
