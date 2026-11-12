@@ -50,6 +50,7 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.Period;
 import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -82,10 +83,19 @@ public class VacationServiceImpl implements VacationService {
     private final RepeatGrantDescriptionFactory repeatGrantDescriptionFactory;
     private final VacationTimeFormatter vacationTimeFormatter;
 
+    /**
+     * 휴가 한 건이 걸칠 수 있는 최대 기간 — 시작일부터 1년 미만.
+     * 가장 긴 휴가 종류(출산 전후 휴가 90일 · 120일)보다 넉넉하고, 하루씩 도는 계산이 수백만 번이 되지 않게 묶는다
+     */
+    private static final Period MAX_VACATION_PERIOD = Period.ofYears(1);
+
     @Transactional
     @Override
     public Long useVacation(VacationServiceDto data) {
         log.debug("휴가 사용 신청 시작: userId={}, type={}, timeType={}", data.getUserId(), data.getType(), data.getTimeType());
+        // 0. 기간 상한 — 아래 단계들이 기간을 하루씩 돌며 목록을 만드므로 무엇보다 먼저 막는다(보안 점검 IEU-4)
+        validateVacationPeriod(data.getStartDate(), data.getEndDate());
+
         // 1. 사용자 검증
         User user = userService.checkUserExist(data.getUserId());
 
@@ -130,11 +140,11 @@ public class VacationServiceImpl implements VacationService {
 
         // 7. 두 날짜 간 모든 날짜 가져오기
         List<LocalDate> betweenDates = TimeUtils.getDateRange(data.getStartDate(), data.getEndDate());
-        log.info("betweenDates : {}, weekDays : {}", betweenDates, weekDays);
 
         // 8. 사용자가 캘린더에서 선택한 날짜 중 휴일, 공휴일 제거
         betweenDates = TimeUtils.excludeDates(betweenDates, weekDays);
-        log.info("remainDays : {}", betweenDates);
+        // 날짜 목록 자체는 로그에 남기지 않는다 — 개인 휴가 일정이고 기간이 길면 로그가 커진다
+        log.debug("휴가 사용 일수 계산: userId={}, offDays={}, useDays={}", data.getUserId(), weekDays.size(), betweenDates.size());
 
         // 9. 등록하려는 총 사용시간 계산
         BigDecimal totalUseTime = new BigDecimal("0.0000").add(data.getTimeType().convertToValue(betweenDates.size()));
@@ -208,6 +218,20 @@ public class VacationServiceImpl implements VacationService {
                 user.getId(), data.getStartDate(), data.getEndDate(), betweenDates.size(), totalUseTime);
 
         return usage.getRowId();
+    }
+
+    /**
+     * 휴가 기간 검증 — 시작 · 종료가 있고, 종료가 시작보다 앞서지 않고, 시작일부터 {@link #MAX_VACATION_PERIOD} 안이어야 한다
+     */
+    private void validateVacationPeriod(LocalDateTime startDate, LocalDateTime endDate) {
+        if (startDate == null || endDate == null || endDate.isBefore(startDate)) {
+            throw new InvalidValueException(HrErrorCode.VACATION_INVALID_DATE);
+        }
+        LocalDate limit = startDate.toLocalDate().plus(MAX_VACATION_PERIOD);
+        if (!endDate.toLocalDate().isBefore(limit)) {
+            log.warn("휴가 사용 실패 - 기간 상한 초과: start={}, end={}", startDate.toLocalDate(), endDate.toLocalDate());
+            throw new InvalidValueException(HrErrorCode.VACATION_INVALID_DATE);
+        }
     }
 
     @Override
