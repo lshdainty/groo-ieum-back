@@ -67,6 +67,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             "POST /api/v1/auth/exchange-code"
     );
 
+    /**
+     * 상태를 바꾸는 요청의 메서드 — 이 요청들은 토큰에 실린 권한이 아니라 DB 의 지금 권한으로 인가한다.
+     * 토큰(최대 1시간)이 발급된 뒤 역할이 회수 · 삭제된 관리자가 남은 수명 동안 자기 권한을 되돌리거나
+     * 다른 관리 작업을 하지 못하게 한다(보안 점검 IEU-2)
+     */
+    private static final Set<String> STATE_CHANGING_METHODS = Set.of("POST", "PUT", "PATCH", "DELETE");
+
     @Override
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
@@ -87,6 +94,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     }
                     // HR JWT인 경우: Claims에서 직접 정보 추출 (DB 조회 없음)
                     authentication = createAuthenticationFromHrToken(token);
+                    // 상태를 바꾸는 요청은 권한을 DB 에서 다시 읽는다 — 삭제(퇴사)된 사용자면 인증하지 않는다
+                    if (isStateChanging(request)) {
+                        authentication = reloadAuthoritiesFromDb(token, authentication);
+                        if (authentication == null) {
+                            filterChain.doFilter(request, response);
+                            return;
+                        }
+                    }
                     if (rejectIfPasswordChangeRequired(authentication, request, response)) {
                         return;
                     }
@@ -155,6 +170,52 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         log.debug("HR JWT 인증 성공 (DB 조회 없음): userId={}, authorities={}", userId, authorities.size());
 
+        return new UsernamePasswordAuthenticationToken(principal, null, authorities);
+    }
+
+    private boolean isStateChanging(HttpServletRequest request) {
+        String method = request.getMethod();
+        return method != null && STATE_CHANGING_METHODS.contains(method.toUpperCase(Locale.ROOT));
+    }
+
+    /**
+     * HR JWT 인증의 역할 · 권한을 DB 의 지금 값으로 바꿔 끼운다.
+     * 사용자 식별 · 비밀번호 변경 표식은 토큰 것을 그대로 쓴다.
+     *
+     * @return DB 권한으로 만든 인증 객체. 사용자가 없거나 삭제됐으면 null
+     */
+    private Authentication reloadAuthoritiesFromDb(String token, Authentication fromToken) {
+        UserPrincipal tokenPrincipal = (UserPrincipal) fromToken.getPrincipal();
+        String userId = jwtTokenProvider.getUserId(token);
+        User user;
+        try {
+            user = userService.findUserById(userId);
+        } catch (Exception e) {
+            log.warn("상태 변경 요청 인증 거절 — 사용자 없음/삭제: userId={}", userId);
+            return null;
+        }
+        List<String> roles = user.getRoles().stream().map(Role::getCode).collect(Collectors.toList());
+        List<String> permissions = user.getAllAuthorities();
+
+        List<String> allAuthorities = new ArrayList<>(roles);
+        allAuthorities.addAll(permissions);
+        List<SimpleGrantedAuthority> authorities = allAuthorities.stream()
+                .distinct()
+                .map(SimpleGrantedAuthority::new)
+                .collect(Collectors.toList());
+
+        JwtClaimsPrincipal principal = new JwtClaimsPrincipal(
+                userId,
+                jwtTokenProvider.getSsoUserRowIdFromHrToken(token),
+                jwtTokenProvider.getNameFromHrToken(token),
+                jwtTokenProvider.getEmailFromHrToken(token),
+                roles, permissions,
+                // 컨트롤러가 쓰는 User 는 지금처럼 필요할 때 읽는다 — 필터에서 읽은 엔티티는 요청의
+                // 영속성 컨텍스트 밖이라 지연 로딩이 깨질 수 있어 넘기지 않는다
+                () -> userService.findUserById(userId),
+                tokenPrincipal.isPasswordChangeRequired()
+        );
+        log.debug("상태 변경 요청 — DB 권한으로 인증: userId={}, authorities={}", userId, authorities.size());
         return new UsernamePasswordAuthenticationToken(principal, null, authorities);
     }
 

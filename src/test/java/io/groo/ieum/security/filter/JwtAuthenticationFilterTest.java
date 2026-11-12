@@ -169,6 +169,84 @@ class JwtAuthenticationFilterTest {
     }
 
     @Nested
+    @DisplayName("보안 점검 IEU-2 - 상태를 바꾸는 요청은 권한을 DB 에서 다시 읽는다")
+    class WriteRequestsReloadAuthorities {
+
+        private MockHttpServletResponse runFilter(String method) throws Exception {
+            MockHttpServletRequest request = new MockHttpServletRequest(method, "/api/v1/users/user1");
+            request.setCookies(new Cookie("hr_access_token", TOKEN));
+            MockHttpServletResponse response = new MockHttpServletResponse();
+            filter.doFilter(request, response, new MockFilterChain());
+            return response;
+        }
+
+        private List<String> currentAuthorities() {
+            return SecurityContextHolder.getContext().getAuthentication().getAuthorities().stream()
+                    .map(org.springframework.security.core.GrantedAuthority::getAuthority)
+                    .toList();
+        }
+
+        @BeforeEach
+        void tokenStillSaysAdmin() {
+            // 토큰은 강등 전에 발급돼 아직 관리자 권한을 싣고 있다
+            given(jwtTokenProvider.getRolesFromHrToken(TOKEN)).willReturn(List.of("ADMIN"));
+            given(jwtTokenProvider.getPermissionsFromHrToken(TOKEN)).willReturn(List.of("ROLE:MANAGE", "USER:MANAGE"));
+            lenient().when(jwtTokenProvider.getRemainingExpiration(TOKEN)).thenReturn(1_800_000L);
+        }
+
+        private void demotedInDb() {
+            // DB 에서는 관리자 역할이 회수돼 일반 직원 권한만 남았다
+            io.groo.ieum.permission.domain.Role userRole = org.mockito.Mockito.mock(io.groo.ieum.permission.domain.Role.class);
+            given(userRole.getCode()).willReturn("USER");
+            User user = org.mockito.Mockito.mock(User.class);
+            given(user.getRoles()).willReturn(List.of(userRole));
+            given(user.getAllAuthorities()).willReturn(List.of("USER", "USER:EDIT"));
+            given(userService.findUserById("user1")).willReturn(user);
+        }
+
+        @Test
+        @DisplayName("성공 - 강등된 관리자의 PUT 은 토큰이 아니라 DB 의 지금 권한으로 인가된다")
+        void demotedAdminWriteUsesDbAuthorities() throws Exception {
+            demotedInDb();
+
+            runFilter("PUT");
+
+            assertThat(currentAuthorities()).containsExactlyInAnyOrder("USER", "USER:EDIT");
+            assertThat(currentAuthorities()).doesNotContain("ADMIN", "ROLE:MANAGE", "USER:MANAGE");
+        }
+
+        @Test
+        @DisplayName("성공 - POST · PATCH · DELETE 도 같다")
+        void otherWriteMethodsUseDbAuthorities() throws Exception {
+            demotedInDb();
+            for (String method : List.of("POST", "PATCH", "DELETE", "delete")) {
+                runFilter(method);
+                assertThat(currentAuthorities()).as(method).doesNotContain("ROLE:MANAGE", "USER:MANAGE");
+                SecurityContextHolder.clearContext();
+            }
+        }
+
+        @Test
+        @DisplayName("성공 - 삭제(퇴사)된 사용자의 쓰기 요청은 인증하지 않는다")
+        void deletedUserWriteNotAuthenticated() throws Exception {
+            given(userService.findUserById("user1")).willThrow(new EntityNotFoundException(HrErrorCode.USER_NOT_FOUND));
+
+            runFilter("DELETE");
+
+            assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+        }
+
+        @Test
+        @DisplayName("성공 - 읽기(GET)는 지금처럼 토큰 권한을 쓰고 DB 를 보지 않는다")
+        void readUsesTokenAuthorities() throws Exception {
+            runFilter("GET");
+
+            assertThat(currentAuthorities()).contains("ADMIN", "ROLE:MANAGE");
+            org.mockito.Mockito.verify(userService, org.mockito.Mockito.never()).findUserById(anyString());
+        }
+    }
+
+    @Nested
     @DisplayName("잔여 수명이 넉넉하면")
     class WhenFresh {
 
