@@ -37,6 +37,7 @@ import java.math.BigDecimal;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.Period;
 import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -115,8 +116,40 @@ public class WorkHistoryServiceImpl implements WorkHistoryService {
                 .collect(Collectors.toList());
     }
 
+    /**
+     * 업무 이력 목록 한 번에 볼 수 있는 최대 기간 — 시작일부터 1년 미만.
+     * 목록은 페이지 없이 한꺼번에 내려가므로, 기간 없이 부르면 전 직원의 전 기간이 한 응답에 실렸다(보안 점검 IEU-8).
+     * 웹 업무 보고서의 기본 기간은 최근 1개월이라 넉넉하다
+     */
+    private static final Period MAX_LIST_PERIOD = Period.ofYears(1);
+
+    /**
+     * 목록 조회 기간을 {@link #MAX_LIST_PERIOD} 안으로 묶는다(조건 객체에 채워 넣는다).<br>
+     * 비어 있는 끝은 다른 끝(둘 다 비면 오늘)에서 1년 폭으로 채우고, 거꾸로이거나 1년 이상이면 거절한다
+     */
+    private void boundListPeriod(WorkHistorySearchCondition condition) {
+        LocalDate start = condition.getStartDate();
+        LocalDate end = condition.getEndDate();
+        if (start == null && end == null) {
+            end = companyClock.today();
+        }
+        if (start == null) {
+            start = end.minus(MAX_LIST_PERIOD).plusDays(1);
+        }
+        if (end == null) {
+            end = start.plus(MAX_LIST_PERIOD).minusDays(1);
+        }
+        if (end.isBefore(start) || !end.isBefore(start.plus(MAX_LIST_PERIOD))) {
+            log.warn("업무 이력 목록 조회 거부 - 기간 범위 초과: start={}, end={}", start, end);
+            throw new InvalidValueException(ErrorCode.INVALID_DATE_RANGE);
+        }
+        condition.setStartDate(start);
+        condition.setEndDate(end);
+    }
+
     @Override
     public List<WorkHistoryServiceDto> findAllWorkHistories(WorkHistorySearchCondition condition) {
+        boundListPeriod(condition);
         log.debug("업무 이력 목록 조회: condition={}", condition);
         List<WorkHistory> workHistories = workHistoryRepository.findAll(condition);
 
