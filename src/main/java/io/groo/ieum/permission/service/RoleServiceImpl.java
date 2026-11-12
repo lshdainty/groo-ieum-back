@@ -7,6 +7,8 @@ import io.groo.core.exception.InvalidValueException;
 import io.groo.ieum.common.exception.HrErrorCode;
 import io.groo.ieum.permission.domain.Permission;
 import io.groo.ieum.permission.domain.Role;
+import io.groo.ieum.permission.domain.RolePermission;
+import io.groo.ieum.permission.domain.UserRole;
 import io.groo.ieum.permission.repository.PermissionRepository;
 import io.groo.ieum.permission.repository.RoleRepository;
 import io.groo.ieum.permission.type.ActionType;
@@ -195,7 +197,10 @@ public class RoleServiceImpl implements RoleService {
                     return new EntityNotFoundException(HrErrorCode.ROLE_NOT_FOUND);
                 });
         role.deleteRole();
-        log.info("역할 삭제 완료: roleCode={}", roleCode);
+        // 부여 기록도 함께 지운다 — 목록에서만 사라지고 가진 사람의 권한에는 남던 것을 막는다(보안 점검 IEU-5)
+        List<UserRole> grants = roleRepository.findActiveUserRolesByRole(role);
+        grants.forEach(UserRole::deleteUserRole);
+        log.info("역할 삭제 완료: roleCode={}, revokedUserCount={}", roleCode, grants.size());
     }
 
     /* ==================== Permission 관련 메서드 ==================== */
@@ -259,6 +264,9 @@ public class RoleServiceImpl implements RoleService {
                     return new EntityNotFoundException(HrErrorCode.PERMISSION_NOT_FOUND);
                 });
         permission.deletePermission();
-        log.info("권한 삭제 완료: permissionCode={}", permissionCode);
+        // 역할 매핑도 함께 지운다 — 삭제한 권한이 역할을 통해 계속 실리지 않게(보안 점검 IEU-5)
+        List<RolePermission> mappings = permissionRepository.findActiveRolePermissionsByPermission(permission);
+        mappings.forEach(RolePermission::deleteRolePermission);
+        log.info("권한 삭제 완료: permissionCode={}, revokedRoleCount={}", permissionCode, mappings.size());
     }
 }

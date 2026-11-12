@@ -3,6 +3,8 @@ package io.groo.ieum.permission.repository;
 import io.groo.core.type.YNType;
 import io.groo.ieum.permission.domain.Permission;
 import io.groo.ieum.permission.domain.QPermission;
+import io.groo.ieum.permission.domain.QRolePermission;
+import io.groo.ieum.permission.domain.RolePermission;
 import io.groo.ieum.permission.type.ActionType;
 import io.groo.ieum.permission.type.ResourceType;
 import com.querydsl.jpa.impl.JPAQueryFactory;
@@ -68,6 +70,19 @@ public class PermissionQueryDslRepository implements PermissionRepository {
                         permission.isDeleted.eq(YNType.N)
                 )
                 .orderBy(permission.action.asc())
+                .fetch();
+    }
+
+    @Override
+    public List<RolePermission> findActiveRolePermissionsByPermission(Permission permission) {
+        QRolePermission rolePermission = QRolePermission.rolePermission;
+
+        return queryFactory
+                .selectFrom(rolePermission)
+                .where(
+                        rolePermission.permission.eq(permission),
+                        rolePermission.isDeleted.eq(YNType.N)
+                )
                 .fetch();
     }
 }

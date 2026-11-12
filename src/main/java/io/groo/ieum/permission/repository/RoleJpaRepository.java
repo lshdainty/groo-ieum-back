@@ -2,6 +2,7 @@ package io.groo.ieum.permission.repository;
 
 import io.groo.core.type.YNType;
 import io.groo.ieum.permission.domain.Role;
+import io.groo.ieum.permission.domain.UserRole;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
@@ -52,6 +53,15 @@ public class RoleJpaRepository implements RoleRepository {
                 "where r.isDeleted = :isDeleted " +
                 "and (rp.isDeleted = :isDeleted or rp is null) " +
                 "order by r.code asc", Role.class)
+                .setParameter("isDeleted", YNType.N)
+                .getResultList();
+    }
+
+    @Override
+    public List<UserRole> findActiveUserRolesByRole(Role role) {
+        return em.createQuery(
+                "select ur from UserRole ur where ur.role = :role and ur.isDeleted = :isDeleted", UserRole.class)
+                .setParameter("role", role)
                 .setParameter("isDeleted", YNType.N)
                 .getResultList();
     }

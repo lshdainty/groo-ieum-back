@@ -1,5 +1,7 @@
 package io.groo.ieum.repository;
 
+import io.groo.ieum.permission.domain.RolePermission;
+import io.groo.ieum.permission.domain.Role;
 import io.groo.ieum.permission.domain.Permission;
 import io.groo.ieum.permission.repository.PermissionQueryDslRepository;
 import io.groo.ieum.permission.type.ActionType;
@@ -266,5 +268,30 @@ class PermissionQueryDslRepositoryTest {
         assertThat(updatedPermission.getDesc()).isEqualTo("수정된 설명");
         assertThat(updatedPermission.getResource()).isEqualTo(ResourceType.VACATION);
         assertThat(updatedPermission.getAction()).isEqualTo(ActionType.WRITE);
+    }
+
+    @Test
+    @DisplayName("권한의 살아 있는 역할 매핑만 조회한다 (IEU-5)")
+    void findActiveRolePermissionsByPermission() {
+        // given
+        Permission manage = Permission.createPermission("USER:MANAGE", "사용자 관리", null, ResourceType.USER, ActionType.MANAGE);
+        Permission read = Permission.createPermission("USER:READ", "사용자 조회", null, ResourceType.USER, ActionType.READ);
+        em.persist(manage);
+        em.persist(read);
+        Role hr = Role.createRoleWithPermissions("HR", "인사", null, List.of(manage, read));
+        Role old = Role.createRoleWithPermissions("OLD", "옛역할", null, List.of(manage));
+        old.removePermission(manage);
+        em.persist(hr);
+        em.persist(old);
+        em.flush();
+        em.clear();
+
+        // when
+        Permission found = permissionRepository.findByCode("USER:MANAGE").orElseThrow();
+        List<RolePermission> mappings = permissionRepository.findActiveRolePermissionsByPermission(found);
+
+        // then
+        assertThat(mappings).hasSize(1);
+        assertThat(mappings.get(0).getRole().getCode()).isEqualTo("HR");
     }
 }

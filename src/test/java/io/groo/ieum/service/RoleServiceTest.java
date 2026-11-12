@@ -5,6 +5,8 @@ import io.groo.core.exception.EntityNotFoundException;
 import io.groo.core.exception.InvalidValueException;
 import io.groo.ieum.permission.domain.Permission;
 import io.groo.ieum.permission.domain.Role;
+import io.groo.ieum.permission.domain.RolePermission;
+import io.groo.ieum.permission.domain.UserRole;
 import io.groo.ieum.permission.repository.PermissionRepository;
 import io.groo.ieum.permission.repository.RoleRepository;
 import io.groo.ieum.permission.service.RoleServiceImpl;
@@ -470,6 +472,21 @@ class RoleServiceTest {
         }
 
         @Test
+        @DisplayName("성공 - 역할을 삭제하면 그 역할을 가진 사람의 부여 기록도 함께 지운다 (IEU-5)")
+        void deleteRoleRevokesGrants() {
+            Role role = Role.createRole("HR", "인사", null);
+            given(roleRepository.findByCode("HR")).willReturn(Optional.of(role));
+            UserRole grant1 = UserRole.createUserRole(null, role);
+            UserRole grant2 = UserRole.createUserRole(null, role);
+            given(roleRepository.findActiveUserRolesByRole(role)).willReturn(List.of(grant1, grant2));
+
+            roleService.deleteRole("HR");
+
+            assertThat(grant1.getIsDeleted()).isEqualTo(io.groo.core.type.YNType.Y);
+            assertThat(grant2.getIsDeleted()).isEqualTo(io.groo.core.type.YNType.Y);
+        }
+
+        @Test
         @DisplayName("실패 - 존재하지 않는 역할이면 예외가 발생한다")
         void deleteRoleFailNotFound() {
             // given
@@ -690,6 +707,21 @@ class RoleServiceTest {
 
             // then
             assertThat(permission.getIsDeleted()).isEqualTo(io.groo.core.type.YNType.Y);
+        }
+
+        @Test
+        @DisplayName("성공 - 권한을 삭제하면 그 권한의 역할 매핑도 함께 지운다 (IEU-5)")
+        void deletePermissionRevokesMappings() {
+            Permission permission = Permission.createPermission("USER:MANAGE", "사용자 관리", null, ResourceType.USER, ActionType.MANAGE);
+            given(permissionRepository.findByCode("USER:MANAGE")).willReturn(Optional.of(permission));
+            Role role = Role.createRoleWithPermissions("HR", "인사", null, List.of(permission));
+            RolePermission mapping = role.getRolePermissions().get(0);
+            given(permissionRepository.findActiveRolePermissionsByPermission(permission)).willReturn(List.of(mapping));
+
+            roleService.deletePermission("USER:MANAGE");
+
+            assertThat(mapping.getIsDeleted()).isEqualTo(io.groo.core.type.YNType.Y);
+            assertThat(role.hasPermission("USER:MANAGE")).isFalse();
         }
 
         @Test

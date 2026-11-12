@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Entity
 @Getter
@@ -399,10 +400,20 @@ public class User extends AuditingFieldsWithIp {
      * @return 역할 리스트
      */
     public List<Role> getRoles() {
-        return this.userRoles.stream()
-                .filter(ur -> YNType.isN(ur.getIsDeleted()))
+        return activeUserRoles()
                 .map(UserRole::getRole)
                 .toList();
+    }
+
+    /**
+     * 살아 있는 역할 부여 기록<br>
+     * 부여 기록이 지워졌거나, 부여 기록은 남았어도 역할 자체가 삭제된 것은 뺀다.
+     * 역할 삭제가 목록에서만 사라지고 가진 사람의 권한에는 그대로 남던 것을 막는다(보안 점검 IEU-5)
+     */
+    private Stream<UserRole> activeUserRoles() {
+        return this.userRoles.stream()
+                .filter(ur -> YNType.isN(ur.getIsDeleted()))
+                .filter(ur -> !YNType.isY(ur.getRole().getIsDeleted()));
     }
 
     /**
@@ -451,8 +462,7 @@ public class User extends AuditingFieldsWithIp {
      * @return 역할 보유 여부
      */
     public boolean hasRole(String roleCode) {
-        return this.userRoles.stream()
-                .filter(ur -> YNType.isN(ur.getIsDeleted()))
+        return activeUserRoles()
                 .anyMatch(ur -> ur.getRole().getCode().equals(roleCode));
     }
 
@@ -463,8 +473,7 @@ public class User extends AuditingFieldsWithIp {
      * @return 권한 코드 리스트 (예: ["ADMIN", "USER:READ", "USER:EDIT", ...])
      */
     public List<String> getAllAuthorities() {
-        return this.userRoles.stream()
-                .filter(ur -> YNType.isN(ur.getIsDeleted()))
+        return activeUserRoles()
                 .flatMap(ur -> {
                     List<String> authorities = new ArrayList<>();
                     // 1. 역할 코드 추가 (예: "ADMIN", "MANAGER", "USER")
