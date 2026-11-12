@@ -195,6 +195,22 @@ public class User extends AuditingFieldsWithIp {
     private List<UserRole> userRoles = new ArrayList<>();
 
     /**
+     * 내부 계정 표식 소속 값<br>
+     * 이 소속의 사용자는 사용자 목록 · 부서원 · 휴가 내역 · 보고서 조회에서 빠진다.
+     * 그래서 API 로는 어떤 경로로도 이 값을 설정하지 못한다(운영 SQL 로만 넣는다)
+     */
+    public static final String SYSTEM_COMPANY = "SYSTEM";
+
+    /**
+     * 소속 값이 내부 계정 표식({@link #SYSTEM_COMPANY})인지 확인<br>
+     * DB 비교(`company != 'SYSTEM'`)는 대소문자를 가리지 않고 끝 공백을 무시하는 콜레이션이라
+     * "system" · "SYSTEM " 도 같은 값으로 걸러진다 — 검사도 같은 기준으로 한다
+     */
+    public static boolean isSystemCompany(String company) {
+        return company != null && SYSTEM_COMPANY.equalsIgnoreCase(company.strip());
+    }
+
+    /**
      * 유저 생성 함수<br>
      * Entity의 경우 Setter없이 Getter만 사용<br>
      * 해당 메소드를 통해 유저 생성할 것

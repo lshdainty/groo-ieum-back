@@ -82,6 +82,7 @@ public class UserServiceImpl implements UserService {
         if (data.getSsoUserRowId() == null) {
             throw new IllegalArgumentException("ssoUserRowId는 필수입니다. SSO에서 사용자 생성 후 진행해주세요.");
         }
+        rejectSystemCompany(data.getCompany());
 
         UserServiceDto profileDto = UserServiceDto.builder().build();
         if (StringUtils.hasText(data.getProfileUUID()) && StringUtils.hasText(data.getProfileUrl())) {
@@ -270,6 +271,15 @@ public class UserServiceImpl implements UserService {
                     throw new ForbiddenException(HrErrorCode.PERMISSION_DENIED);
                 }
             }
+            // 소속은 관리 권한으로만 바꾼다 — 같은 값을 다시 보내는 것(프로필 저장)은 허용한다
+            if (data.getCompany() != null && !data.getCompany().equals(user.getCompany())) {
+                log.warn("소속 변경 접근 거부 - 로그인 유저: {}, 대상 유저: {}", loginUserId, data.getId());
+                throw new ForbiddenException(HrErrorCode.PERMISSION_DENIED);
+            }
+        }
+        // 내부 계정 표식으로는 누구도 바꾸지 못한다(이미 그 값인 계정을 그대로 저장하는 것만 허용)
+        if (!User.isSystemCompany(user.getCompany())) {
+            rejectSystemCompany(data.getCompany());
         }
 
         // 사진 지우기가 오면 새 사진은 보지 않는다(지우기와 바꾸기가 같이 오면 지우기가 이긴다)
@@ -534,6 +544,8 @@ public class UserServiceImpl implements UserService {
     @Transactional
     public UserServiceDto.InviteResult inviteUser(UserServiceDto data) {
         log.debug("사용자 초대 시작: userId={}, email={}", data.getId(), data.getEmail());
+        // SSO 에 초대를 보내기 전에 막는다 — 거절할 요청으로 SSO 계정이 만들어지지 않게
+        rejectSystemCompany(data.getCompany());
 
         // 1. SSO API 호출 (동기적)
         SsoInviteResponse ssoResponse = ssoApiClient.inviteUser(
@@ -642,6 +654,7 @@ public class UserServiceImpl implements UserService {
             log.warn("초대 수정 거부 - 대기 중인 초대가 아님: userId={}", userId);
             throw new InvalidValueException(ErrorCode.INVALID_PARAMETER);
         }
+        rejectSystemCompany(data.getCompany());
 
         // 정보 수정 (비밀번호 제외 필드만)
         user.updateUser(
@@ -671,6 +684,18 @@ public class UserServiceImpl implements UserService {
                 .joinDate(user.getJoinDate())
                 .countryCode(user.getCountryCode())
                 .build();
+    }
+
+    /**
+     * 내부 계정 표식 소속(SYSTEM)을 API 로 설정하려 하면 거절한다<br>
+     * 그 소속은 사용자 목록 · 부서원 · 휴가 내역 · 보고서에서 빠지므로, 설정되면 관리자가 찾아 역할을 빼거나
+     * 삭제할 수 없는 계정이 된다
+     */
+    private void rejectSystemCompany(String company) {
+        if (User.isSystemCompany(company)) {
+            log.warn("내부 계정 소속 설정 거부: company={}", company);
+            throw new InvalidValueException(ErrorCode.INVALID_PARAMETER);
+        }
     }
 
     private boolean isInvitationPending(User user) {
