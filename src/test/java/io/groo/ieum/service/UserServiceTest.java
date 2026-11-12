@@ -259,6 +259,45 @@ class UserServiceTest {
     }
 
     @Nested
+    @DisplayName("보안 점검 IEU-8 - 최상위 부서장 판별")
+    class IsTopDepartmentHead {
+        private UserDepartment mainDept(String headId, Long parentId) {
+            Department dept = mock(Department.class);
+            User head = headId == null ? null : createTestUser(headId, "부서장", headId + "@test.com");
+            lenient().when(dept.getHeadUser()).thenReturn(head);
+            lenient().when(dept.getParentId()).thenReturn(parentId);
+            UserDepartment ud = mock(UserDepartment.class);
+            given(ud.getDepartment()).willReturn(dept);
+            return ud;
+        }
+
+        @Test
+        @DisplayName("최상위 부서의 부서장 본인이면 true")
+        void topHead() {
+            UserDepartment top = mainDept("ceo", null);
+            given(departmentRepository.findMainDepartmentByUserId("ceo")).willReturn(Optional.of(top));
+            assertThat(userService.isTopDepartmentHead("ceo")).isTrue();
+        }
+
+        @Test
+        @DisplayName("최상위 부서의 일반 구성원 · 하위 부서의 부서장 · 부서 없음 · 부서장 빈 부서는 false")
+        void notTopHead() {
+            UserDepartment top = mainDept("ceo", null);
+            UserDepartment team = mainDept("teamlead", 1L);
+            UserDepartment headless = mainDept(null, null);
+            given(departmentRepository.findMainDepartmentByUserId("member")).willReturn(Optional.of(top));
+            given(departmentRepository.findMainDepartmentByUserId("teamlead")).willReturn(Optional.of(team));
+            given(departmentRepository.findMainDepartmentByUserId("nodept")).willReturn(Optional.empty());
+            given(departmentRepository.findMainDepartmentByUserId("headless")).willReturn(Optional.of(headless));
+
+            assertThat(userService.isTopDepartmentHead("member")).isFalse();
+            assertThat(userService.isTopDepartmentHead("teamlead")).isFalse();
+            assertThat(userService.isTopDepartmentHead("nodept")).isFalse();
+            assertThat(userService.isTopDepartmentHead("headless")).isFalse();
+        }
+    }
+
+    @Nested
     @DisplayName("회원 가입")
     class JoinUser {
         @Test

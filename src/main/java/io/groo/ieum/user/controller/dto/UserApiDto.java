@@ -317,8 +317,11 @@ public class UserApiDto {
         @Schema(description = "가용 승인자 수 (최대 선택 가능 인원)", example = "2")
         private int maxAvailableCount;
 
-        @Schema(description = "자동 승인 여부 (가용 승인자가 없는 경우 true)", example = "false")
+        @Schema(description = "자동 승인 여부 (가용 승인자가 없고 본인이 최상위 부서장일 때만 true)", example = "false")
         private boolean isAutoApproval;
+
+        @Schema(description = "결재선 없음 (가용 승인자가 없고 최상위 부서장도 아님 — 결재가 필요한 신청은 거절된다)", example = "false")
+        private boolean noApprovalLine;
     }
 
     @Getter

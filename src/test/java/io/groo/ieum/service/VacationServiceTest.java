@@ -2243,6 +2243,34 @@ class VacationServiceTest {
             // then
             then(vacationGrantRepository).should().save(any(VacationGrant.class));
         }
+
+        @Test
+        @DisplayName("실패 - 보안 점검 IEU-8: 결재가 필요한데 결재선이 비었고 최상위 부서장도 아니면 결재선 없음으로 거절한다")
+        void requestVacationFailNoApprovalLine() {
+            givenRequestSetup("u1");
+            given(userService.isTopDepartmentHead("u1")).willReturn(false);
+
+            assertThatThrownBy(() -> vacationService.requestVacation("u1", request()))
+                    .isInstanceOf(BusinessRuleViolationException.class)
+                    .extracting(e -> ((BusinessRuleViolationException) e).getErrorCode())
+                    .isEqualTo(HrErrorCode.VACATION_NO_APPROVAL_LINE);
+            then(vacationGrantRepository).should(never()).save(any());
+        }
+
+        @Test
+        @DisplayName("성공 - 결재선이 비었어도 최상위 부서장 본인이면 자동 승인된다")
+        void requestVacationAutoApproveTopHead() {
+            givenRequestSetup("u1");
+            given(userService.isTopDepartmentHead("u1")).willReturn(true);
+            OnRequest onRequest = mock(OnRequest.class);
+            given(vacationPolicyStrategyFactory.getStrategy(GrantMethod.ON_REQUEST)).willReturn(onRequest);
+            given(onRequest.calculateGrantTime(any(), any())).willReturn(new BigDecimal("1.0000"));
+
+            vacationService.requestVacation("u1", request());
+
+            then(vacationGrantRepository).should().save(any(VacationGrant.class));
+            then(vacationApprovalRepository).should(never()).saveAll(any());
+        }
     }
 
     // 테스트 헬퍼 메서드들

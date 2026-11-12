@@ -10,6 +10,8 @@ import org.springframework.stereotype.Repository;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.HashSet;
 import java.util.Optional;
 
 @Repository("departmentJpaRepository")
@@ -129,7 +131,9 @@ public class DepartmentJpaRepository implements DepartmentRepository {
         }
 
         List<Department> approverDepartments = new ArrayList<>();
+        Set<String> headIds = new HashSet<>();
         Department currentDept = userDeptResult.get(0).getDepartment();
+        addApproverDepartment(approverDepartments, headIds, currentDept, userId);
 
         while (currentDept != null && currentDept.getParentId() != null) {
             List<Department> parentResult = em.createQuery(
@@ -143,13 +147,23 @@ public class DepartmentJpaRepository implements DepartmentRepository {
             }
 
             Department parentDept = parentResult.get(0);
-            if (parentDept.getHeadUser() != null) {
-                approverDepartments.add(parentDept);
-            }
+            addApproverDepartment(approverDepartments, headIds, parentDept, userId);
 
             currentDept = parentDept;
         }
 
         return approverDepartments;
+    }
+
+    private static void addApproverDepartment(List<Department> approverDepartments, Set<String> headIds,
+                                              Department dept, String userId) {
+        if (dept == null || dept.getHeadUser() == null) {
+            return;
+        }
+        String headId = dept.getHeadUser().getId();
+        if (headId.equals(userId) || !headIds.add(headId)) {
+            return;
+        }
+        approverDepartments.add(dept);
     }
 }

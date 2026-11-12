@@ -972,6 +972,14 @@ public class VacationServiceImpl implements VacationService {
         log.debug("승인자 검증: userId={}, policyRequired={}, available={}, actualRequired={}",
                 userId, requiredCount, availableApproverCount, actualRequiredCount);
 
+        // 결재가 필요한데 결재선이 비었으면 최상위 부서장 본인만 자동 승인한다 — 부서가 없거나 부서장이 비어
+        // 결재선이 없는 사람이 신청형 휴가를 스스로 승인하던 것을 막는다(보안 점검 IEU-8)
+        if (requiredCount != null && requiredCount > 0 && availableApproverCount == 0
+                && !userService.isTopDepartmentHead(userId)) {
+            log.warn("휴가 신청 실패 - 결재선 없음: userId={}, policyId={}", userId, data.getPolicyId());
+            throw new BusinessRuleViolationException(HrErrorCode.VACATION_NO_APPROVAL_LINE);
+        }
+
         if (actualRequiredCount > 0) {
             // 승인자가 필요하지만 미지정된 경우
             if (approverIds == null || approverIds.isEmpty()) {
@@ -1038,8 +1046,8 @@ public class VacationServiceImpl implements VacationService {
             }
 
             // 6-5. 승인자를 부서 레벨 순서로 정렬 (레벨 오름차순: 하위 부서장 먼저)
-            Map<String, Department> approverDepartmentMap = departments.stream()
-                    .filter(dept -> dept.getHeadUser() != null)
+            //      결재선(중복 없는 부서장 목록)에서 승인자의 부서를 찾는다 — 한 사람이 여러 부서장이어도 겹치지 않는다
+            Map<String, Department> approverDepartmentMap = availableApproverDepartments.stream()
                     .collect(Collectors.toMap(dept -> dept.getHeadUser().getId(), dept -> dept));
 
             approverIds.sort((id1, id2) -> {

@@ -149,6 +149,15 @@ public interface UserService {
     List<UserServiceDto> getUserApprovers(String userId);
 
     /**
+     * 결재선 없이 자동 승인될 수 있는 사람인지 — 메인 부서가 최상위 부서이고 본인이 그 부서장일 때만 true<br>
+     * 결재선이 비었을 때 이 사람만 신청형 휴가가 자동 승인되고, 나머지는 결재선 없음으로 거절된다(보안 점검 IEU-8)
+     *
+     * @param userId 유저 ID
+     * @return 최상위 부서장 본인 여부
+     */
+    boolean isTopDepartmentHead(String userId);
+
+    /**
      * Spring Security용: 사용자 ID로 User 조회 (역할 및 권한 포함)
      * 2단계 쿼리로 MultipleBagFetchException 방지
      *
