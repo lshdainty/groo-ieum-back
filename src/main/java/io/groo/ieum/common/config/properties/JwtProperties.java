@@ -32,4 +32,11 @@ public class JwtProperties {
      * 기본값: 1시간 (3600000ms)
      */
     private long hrAccessExpiration = 3600000;
+
+    /**
+     * HR 토큰 절대 수명(밀리초) — SSO 로그인(토큰 교환)부터 이 시간이 지나면 슬라이딩 갱신을 멈춘다(보안 점검 M-1).
+     * 갱신은 이음 DB 만 보므로, SSO 에서 놓친 폐기 · 삭제가 끝없이 전파되지 않았다. 이 상한이 지나면 SSO 로 다시
+     * 로그인해야 한다(그때 SSO 가 지금 상태를 본다). 기본 30일 — 담다 DAM-5 와 같다.
+     */
+    private long hrAbsoluteLifetime = 2_592_000_000L;
 }

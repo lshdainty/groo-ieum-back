@@ -56,6 +56,7 @@ class JwtAuthenticationFilterTest {
 
     private static final String TOKEN = "hr-jwt-token";
     private static final String RENEWED = "hr-jwt-token-renewed";
+    private static final java.util.Date LOGGED_IN_AT = new java.util.Date(System.currentTimeMillis() - 60_000L);
 
     @BeforeEach
     void setUpHrTokenAuth() {
@@ -70,8 +71,11 @@ class JwtAuthenticationFilterTest {
         lenient().when(jwtTokenProvider.getPermissionsFromHrToken(TOKEN)).thenReturn(List.of());
         // 갱신 분기에서만 쓰이는 스텁 — 비갱신 테스트에서는 호출되지 않는다.
         lenient().when(jwtProperties.getHrAccessExpiration()).thenReturn(3_600_000L);
-        lenient().when(jwtTokenProvider.createHrAccessToken(any(User.class), anyList(), anyList(), org.mockito.ArgumentMatchers.anyBoolean()))
-            .thenReturn(RENEWED);
+        lenient().when(jwtTokenProvider.createHrAccessToken(any(), any(), any(), any(), anyList(), anyList(),
+                org.mockito.ArgumentMatchers.anyBoolean(), any())).thenReturn(RENEWED);
+        // 절대 수명(M-1) — 기본은 방금 로그인한 토큰
+        lenient().when(jwtProperties.getHrAbsoluteLifetime()).thenReturn(2_592_000_000L);
+        lenient().when(jwtTokenProvider.getHrAuthTime(TOKEN)).thenReturn(LOGGED_IN_AT);
     }
 
     @AfterEach
@@ -111,6 +115,42 @@ class JwtAuthenticationFilterTest {
     }
 
     @Nested
+    @DisplayName("보안 점검 M-1 - 절대 수명(SSO 로그인부터 30일)")
+    class AbsoluteLifetime {
+
+        @Test
+        @DisplayName("갱신하면 로그인 시각을 그대로 옮겨 싣는다 — 갱신해도 절대 수명이 늘지 않는다")
+        void renewalCarriesAuthTime() throws Exception {
+            given(jwtTokenProvider.getRemainingExpiration(TOKEN)).willReturn(300_000L);
+            User user = org.mockito.Mockito.mock(User.class);
+            linkTo(user, 7L);
+            given(user.getRoles()).willReturn(new java.util.ArrayList<>());
+            given(user.getAllAuthorities()).willReturn(List.of());
+            given(userService.findUserById("user1")).willReturn(user);
+
+            runFilter();
+
+            org.mockito.Mockito.verify(jwtTokenProvider).createHrAccessToken(any(), any(), any(), any(), anyList(),
+                    anyList(), org.mockito.ArgumentMatchers.anyBoolean(), org.mockito.ArgumentMatchers.eq(LOGGED_IN_AT));
+        }
+
+        @Test
+        @DisplayName("로그인부터 30일이 지났으면 쓰는 중이어도 갱신하지 않는다 — 이번 요청은 남은 수명으로 처리한다")
+        void pastAbsoluteLifetime_notRenewed() throws Exception {
+            given(jwtTokenProvider.getRemainingExpiration(TOKEN)).willReturn(300_000L);
+            given(jwtTokenProvider.getHrAuthTime(TOKEN))
+                    .willReturn(new java.util.Date(System.currentTimeMillis() - 2_592_000_000L - 60_000L));
+
+            MockHttpServletResponse response = runFilter();
+
+            assertThat(response.getHeader("Set-Cookie")).isNull();
+            assertThat(SecurityContextHolder.getContext().getAuthentication()).isNotNull();
+            org.mockito.Mockito.verify(jwtTokenProvider, org.mockito.Mockito.never()).createHrAccessToken(any(), any(),
+                    any(), any(), anyList(), anyList(), org.mockito.ArgumentMatchers.anyBoolean(), any());
+        }
+    }
+
+    @Nested
     @DisplayName("보안 점검 IEU-6 - 갱신 구간인데 행의 연결 번호가 토큰과 다르면")
     class WhenRowSwapped {
 
@@ -126,7 +166,8 @@ class JwtAuthenticationFilterTest {
 
             assertThat(response.getHeader("Set-Cookie")).isNull();
             org.mockito.Mockito.verify(jwtTokenProvider, org.mockito.Mockito.never())
-                    .createHrAccessToken(any(User.class), anyList(), anyList(), org.mockito.ArgumentMatchers.anyBoolean());
+                    .createHrAccessToken(any(), any(), any(), any(), anyList(), anyList(),
+                            org.mockito.ArgumentMatchers.anyBoolean(), any());
         }
     }
 

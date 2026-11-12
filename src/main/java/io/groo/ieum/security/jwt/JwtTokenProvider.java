@@ -34,6 +34,8 @@ public class JwtTokenProvider {
     private final SsoJwksKeyLocator ssoJwksKeyLocator;
     private SecretKey hrKey;
 
+    /** SSO 로그인(토큰 교환) 시각(epoch 초) — 갱신해도 옮겨 실어 절대 수명을 잰다(보안 점검 M-1) */
+    static final String AUTH_TIME_CLAIM = "auth_time";
     private static final String HR_ISSUER = "porest-hr";
     private static final String TOKEN_TYPE_CLAIM = "type";
     private static final String TOKEN_TYPE_HR_ACCESS = "hr_access";
@@ -213,8 +215,19 @@ public class JwtTokenProvider {
                                       String name, String email,
                                       List<String> roles, List<String> permissions,
                                       boolean passwordChangeRequired) {
+        return createHrAccessToken(userId, ssoUserRowId, name, email, roles, permissions, passwordChangeRequired, null);
+    }
+
+    /**
+     * @param authTime SSO 로그인(토큰 교환) 시각 — 갱신 때는 옛 토큰의 값을 그대로 옮긴다. null 이면 지금(새 로그인)
+     */
+    public String createHrAccessToken(String userId, Long ssoUserRowId,
+                                      String name, String email,
+                                      List<String> roles, List<String> permissions,
+                                      boolean passwordChangeRequired, Date authTime) {
         Date now = new Date();
         Date expiration = new Date(now.getTime() + jwtProperties.getHrAccessExpiration());
+        Date loggedInAt = authTime != null ? authTime : now;
 
         JwtBuilder builder = Jwts.builder()
                 .id(java.util.UUID.randomUUID().toString())  // jti — 로그아웃 차단 목록의 키
@@ -227,7 +240,9 @@ public class JwtTokenProvider {
                 .claim("name", name)
                 .claim("email", email)
                 .claim("roles", roles)
-                .claim("permissions", permissions);
+                .claim("permissions", permissions)
+                // 절대 수명의 기준 — 갱신해도 바뀌지 않는다(보안 점검 M-1)
+                .claim(AUTH_TIME_CLAIM, loggedInAt.getTime() / 1000);
         if (passwordChangeRequired) {
             builder.claim(PWD_CHANGE_CLAIM, PWD_CHANGE_REQUIRED);
         }
@@ -241,6 +256,19 @@ public class JwtTokenProvider {
      */
     public String getHrJti(String token) {
         return getHrClaims(token).getId();
+    }
+
+    /**
+     * HR 토큰의 SSO 로그인 시각 — 절대 수명(M-1)의 기준. 이 클레임이 생기기 전 토큰은 발급 시각(iat)으로 본다
+     * (그 토큰이 갱신되며 이어 온 로그인이라도 배포 시점부터 최대 절대 수명 안에 끝난다).
+     */
+    public Date getHrAuthTime(String token) {
+        Claims claims = getHrClaims(token);
+        Object v = claims.get(AUTH_TIME_CLAIM);
+        if (v instanceof Number n) {
+            return new Date(n.longValue() * 1000);
+        }
+        return claims.getIssuedAt();
     }
 
     /**
