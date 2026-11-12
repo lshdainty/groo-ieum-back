@@ -130,6 +130,9 @@ public class UserApiDto {
 
         @Schema(description = "회원가입 완료 시간")
         private java.time.LocalDateTime registeredAt;
+
+        @Schema(description = "생일 월-일(MM-dd) — 직원 목록에서 생일 · 회비 화면이 쓴다. 생년(연도)은 user_birth 로만, 본인 · 관리자에게만 내린다", example = "02-03")
+        private String userBirthMonthDay;
     }
 
     @Getter
