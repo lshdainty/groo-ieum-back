@@ -146,8 +146,10 @@ public class SsoApiClientImpl implements SsoApiClient {
 
             ApiResponse<List<SsoInvitationStatusResponse>> body = response.getBody();
             if (body == null || body.getData() == null) {
-                log.warn("SSO getInvitationStatus API returned empty response");
-                return Collections.emptyList();
+                // 2xx 인데 본문이 비었다 — SSO 는 대상이 없어도 빈 목록([])을 준다. 빈 결과로 읽으면 "모두 사라짐" 이 돼
+                // 합침 재연결이 살아 있는 계정의 행까지 묶을 수 있다(보안 점검 SSO-13, 5차 검증). 실패로 닫는다.
+                log.warn("SSO getInvitationStatus API returned empty body — 실패로 본다");
+                throw new ExternalServiceException(HrErrorCode.SSO_SERVICE_ERROR, "SSO 초대 상태 응답이 비어 있습니다");
             }
 
             log.info("SSO getInvitationStatus API success: count={}", body.getData().size());
