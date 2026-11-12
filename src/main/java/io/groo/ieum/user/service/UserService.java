@@ -87,6 +87,14 @@ public interface UserService {
     User findUserById(String userId);
 
     /**
+     * 초대 대기 계정 번호로 만든 이음 행을 합쳐진 SSO 계정 번호에 다시 묶는다(groo-sso-back 보안 점검 SSO-2 운영 위험).<br>
+     * USER_LINKED 이벤트를 놓쳤을 때 토큰 교환이 부른다. previousNos 는 SSO 가 "이 계정에 합쳐졌다" 고 답한 번호만.
+     *
+     * @return 다시 묶었으면 true. 묶을 행이 없거나 이미 그 번호의 행이 있으면 false
+     */
+    boolean relinkMergedSsoUser(Long ssoUserNo, List<Long> previousNos, String userId, String name, String email);
+
+    /**
      * 프로필 URL에서 물리적 파일명을 추출
      *
      * @param profileUrl 프로필 URL

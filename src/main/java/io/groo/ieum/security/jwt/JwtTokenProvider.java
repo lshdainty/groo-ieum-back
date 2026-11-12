@@ -128,6 +128,16 @@ public class JwtTokenProvider {
         return claims.getSubject();
     }
 
+    /** SSO JWT 토큰의 이름 클레임(없으면 null) */
+    public String getNameFromSsoToken(String token) {
+        return getSsoClaims(token).get("name", String.class);
+    }
+
+    /** SSO JWT 토큰의 이메일 클레임(없으면 null) */
+    public String getEmailFromSsoToken(String token) {
+        return getSsoClaims(token).get("email", String.class);
+    }
+
     /**
      * SSO JWT 토큰에서 서비스 목록 추출
      *

@@ -161,6 +161,29 @@ public class SsoApiClientImpl implements SsoApiClient {
     }
 
     @Override
+    public List<Long> getLinkedFrom(Long userNo) {
+        if (userNo == null) {
+            return Collections.emptyList();
+        }
+        try {
+            // 서버 간 호출 전용 API — SSO 가 ROLE_SERVICE + 이 계정의 이음 접근을 요구한다
+            HttpHeaders headers = new HttpHeaders();
+            headers.setBearerAuth(issueServiceToken());
+            ResponseEntity<ApiResponse<List<Long>>> response = ssoRestTemplate.exchange(
+                    "/api/v1/users/" + userNo + "/linked-from",
+                    HttpMethod.GET,
+                    new HttpEntity<>(headers),
+                    new ParameterizedTypeReference<ApiResponse<List<Long>>>() {}
+            );
+            ApiResponse<List<Long>> body = response.getBody();
+            return body == null || body.getData() == null ? Collections.emptyList() : body.getData();
+        } catch (Exception e) {
+            log.warn("SSO linked-from 조회 실패(재연결 없이 진행): userNo={}, error={}", userNo, e.getMessage());
+            return Collections.emptyList();
+        }
+    }
+
+    @Override
     public String exchangeOAuthCode(String code, String codeVerifier, String redirectUri) {
         log.debug("Calling SSO /oauth2/token: clientId={}", clientCode);
 

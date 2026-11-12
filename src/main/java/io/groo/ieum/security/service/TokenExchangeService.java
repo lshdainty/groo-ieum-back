@@ -1,5 +1,6 @@
 package io.groo.ieum.security.service;
 
+import io.groo.core.exception.EntityNotFoundException;
 import io.groo.core.exception.ErrorCode;
 import io.groo.core.exception.ForbiddenException;
 import io.groo.core.exception.UnauthorizedException;
@@ -51,6 +52,42 @@ public class TokenExchangeService {
     }
 
     /**
+     * 토큰의 SSO 사용자로 들어갈 이음 행을 찾는다.
+     *
+     * <p>로그인 아이디만 믿지 않는다 — SSO 사용자 번호(userNo)가 이음 행의 연결 번호(ssoUserRowId)와 같아야 그 행으로
+     * 로그인시킨다. 이음 행의 아이디가 (위조 이벤트 등으로) 다른 사람 것으로 바뀌어도 그 사람의 SSO 토큰이 남의 행
+     * (예: 관리자)으로 들어오지 못한다(보안 점검 IEU-6).
+     *
+     * <p>못 찾으면 한 번 다시 묶어 본다(SSO-2 운영 위험) — 초대 수락 알림(USER_LINKED)을 놓치면 이음 행은 지워진
+     * 대기 계정 번호에 남는다. SSO 에 "이 계정에 합쳐진 대기 번호" 를 물어(서비스 토큰 + 이 계정의 이음 접근 필요)
+     * 그 번호의 행만 이 계정에 다시 묶는다. 아무 행이나 이메일로 고르지 않는다.
+     */
+    private User findLinkedUser(String ssoToken, String userId, Long ssoUserNo) {
+        User user = null;
+        try {
+            user = userService.findUserById(userId);
+        } catch (EntityNotFoundException e) {
+            // 아래에서 다시 묶어 본다
+        }
+        if (user != null && user.isLinkedToSsoUser(ssoUserNo)) {
+            return user;
+        }
+        List<Long> previous = ssoApiClient.getLinkedFrom(ssoUserNo);
+        if (!previous.isEmpty() && userService.relinkMergedSsoUser(ssoUserNo, previous, userId,
+                jwtTokenProvider.getNameFromSsoToken(ssoToken), jwtTokenProvider.getEmailFromSsoToken(ssoToken))) {
+            User relinked = userService.findUserById(userId);
+            if (relinked.isLinkedToSsoUser(ssoUserNo)) {
+                return relinked;
+            }
+        }
+        if (user == null) {
+            throw new EntityNotFoundException(HrErrorCode.USER_NOT_FOUND);
+        }
+        log.warn("토큰 교환 거부 - SSO 사용자 번호와 이음 연결 번호 불일치: userId={}", userId);
+        throw new UnauthorizedException(ErrorCode.UNAUTHORIZED);
+    }
+
+    /**
      * SSO 토큰을 HR 토큰으로 교환
      *
      * @param ssoToken SSO에서 발급한 JWT 토큰
@@ -79,16 +116,8 @@ public class TokenExchangeService {
         String userId = jwtTokenProvider.getUserIdFromSsoToken(ssoToken);
 
         // 5. HR DB에서 사용자 조회
-        User user = userService.findUserById(userId);
-
-        // 5-1. 로그인 아이디만 믿지 않는다 — SSO 사용자 번호(userNo)가 이음 행의 연결 번호(ssoUserRowId)와
-        //      같아야 그 행으로 로그인시킨다. 이음 행의 아이디가 (위조 이벤트 등으로) 다른 사람 것으로 바뀌어도
-        //      그 사람의 SSO 토큰이 남의 행(예: 관리자)으로 들어오지 못한다(보안 점검 IEU-6)
         Long ssoUserNo = jwtTokenProvider.getUserNoFromSsoToken(ssoToken);
-        if (!user.isLinkedToSsoUser(ssoUserNo)) {
-            log.warn("토큰 교환 거부 - SSO 사용자 번호와 이음 연결 번호 불일치: userId={}", userId);
-            throw new UnauthorizedException(ErrorCode.UNAUTHORIZED);
-        }
+        User user = findLinkedUser(ssoToken, userId, ssoUserNo);
 
         // 6. 역할/권한 조회
         List<String> roles = user.getRoles().stream()
