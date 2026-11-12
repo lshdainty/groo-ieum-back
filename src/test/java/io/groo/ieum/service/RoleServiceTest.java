@@ -31,6 +31,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.BDDMockito.willDoNothing;
@@ -784,41 +785,85 @@ class RoleServiceTest {
                     .isEqualTo("PERMISSION_006");
         }
 
+        private Permission roleManage() {
+            return Permission.createPermission("ROLE:MANAGE", "역할 관리", null, ResourceType.ROLE, ActionType.MANAGE);
+        }
+
+        private Permission userRead() {
+            return Permission.createPermission("USER:READ", "사용자 조회", null, ResourceType.USER, ActionType.READ);
+        }
+
+        /**
+         * DB 조회(findByCode)는 utf8mb4_unicode_ci 라 "admin" · "ADMIN " 같은 표기로도 실제 ADMIN 행을 돌려준다.
+         * 목으로 그 상황(다른 표기로 찾아와도 엔티티 코드는 ADMIN)을 재현한다
+         */
+        @org.junit.jupiter.params.ParameterizedTest(name = "역할 표기 [{0}]")
+        @org.junit.jupiter.params.provider.ValueSource(strings = {"ADMIN", "admin", "ADMIN ", "Admin"})
+        @DisplayName("ADMIN 역할은 어떤 표기로 불러도 지울 수 없다 — 역할 · 부여 기록이 그대로다")
+        void cannotDeleteAdminRole(String requested) {
+            Role admin = Role.createRole("ADMIN", "관리자", null);
+            given(roleRepository.findByCode(requested)).willReturn(Optional.of(admin));
+
+            assertProtected(() -> roleService.deleteRole(requested));
+
+            assertThat(admin.getIsDeleted()).isEqualTo(io.groo.core.type.YNType.N);
+            then(roleRepository).should(org.mockito.Mockito.never()).findActiveUserRolesByRole(any());
+            then(tokenRevocationService).shouldHaveNoInteractions();
+        }
+
+        @org.junit.jupiter.params.ParameterizedTest(name = "권한 표기 [{0}]")
+        @org.junit.jupiter.params.provider.ValueSource(strings = {"ROLE:MANAGE", "role:manage", "ROLE:MANAGE ", "Role:Manage"})
+        @DisplayName("ROLE:MANAGE 권한은 어떤 표기로 불러도 지울 수 없다")
+        void cannotDeleteRoleManagePermission(String requested) {
+            Permission manage = roleManage();
+            given(permissionRepository.findByCode(requested)).willReturn(Optional.of(manage));
+
+            assertProtected(() -> roleService.deletePermission(requested));
+
+            assertThat(manage.getIsDeleted()).isEqualTo(io.groo.core.type.YNType.N);
+            then(permissionRepository).should(org.mockito.Mockito.never()).findActiveRolePermissionsByPermission(any());
+        }
+
         @Test
-        @DisplayName("ADMIN 역할은 지울 수 없다 — 조회 · 회수도 하지 않는다")
-        void cannotDeleteAdminRole() {
-            assertProtected(() -> roleService.deleteRole("ADMIN"));
-            then(roleRepository).shouldHaveNoInteractions();
+        @DisplayName("ADMIN 에서 ROLE:MANAGE 빼기 — admin · role:manage 표기로 불러도 세 경로 모두 거절하고 권한이 남는다")
+        void adminMustKeepRoleManageAnySpelling() {
+            Permission manage = roleManage();
+            Permission read = userRead();
+            Role admin = Role.createRoleWithPermissions("ADMIN", "관리자", null, List.of(manage));
+            given(roleRepository.findByCodeWithPermissions(anyString())).willReturn(Optional.of(admin));
+            given(permissionRepository.findByCode("role:manage")).willReturn(Optional.of(manage));
+            given(permissionRepository.findByCode("USER:READ")).willReturn(Optional.of(read));
+
+            assertProtected(() -> roleService.removePermissionFromRole("admin", "role:manage"));
+            assertProtected(() -> roleService.updateRolePermissions("ADMIN ", List.of("USER:READ")));
+            assertProtected(() -> roleService.updateRoleWithPermissions("admin", "관리자", null, List.of("USER:READ")));
+
+            assertThat(admin.hasPermission("ROLE:MANAGE")).isTrue();
             then(tokenRevocationService).shouldHaveNoInteractions();
         }
 
         @Test
-        @DisplayName("ROLE:MANAGE 권한은 지울 수 없다")
-        void cannotDeleteRoleManagePermission() {
-            assertProtected(() -> roleService.deletePermission("ROLE:MANAGE"));
-            then(permissionRepository).shouldHaveNoInteractions();
-        }
-
-        @Test
-        @DisplayName("ADMIN 역할에서 ROLE:MANAGE 를 빼는 수정 세 경로를 모두 거절한다")
-        void adminMustKeepRoleManage() {
-            assertProtected(() -> roleService.removePermissionFromRole("ADMIN", "ROLE:MANAGE"));
-            assertProtected(() -> roleService.updateRolePermissions("ADMIN", List.of("USER:READ")));
-            assertProtected(() -> roleService.updateRoleWithPermissions("ADMIN", "관리자", null, List.of()));
-            then(roleRepository).shouldHaveNoInteractions();
-        }
-
-        @Test
-        @DisplayName("ADMIN 역할의 권한 목록을 바꿔도 ROLE:MANAGE 가 남아 있으면 된다")
-        void adminKeepsRoleManageOk() {
-            Permission manage = Permission.createPermission("ROLE:MANAGE", "역할 관리", null, ResourceType.ROLE, ActionType.MANAGE);
+        @DisplayName("ADMIN 의 권한 목록에 역할 관리가 다른 표기(role:manage)로 들어 있으면 그대로 허용한다")
+        void adminKeepsRoleManageViaOtherSpelling() {
+            Permission manage = roleManage();
             Role admin = Role.createRoleWithPermissions("ADMIN", "관리자", null, List.of(manage));
-            given(roleRepository.findByCodeWithPermissions("ADMIN")).willReturn(Optional.of(admin));
-            given(permissionRepository.findByCode("ROLE:MANAGE")).willReturn(Optional.of(manage));
+            given(roleRepository.findByCodeWithPermissions("admin")).willReturn(Optional.of(admin));
+            given(permissionRepository.findByCode("role:manage")).willReturn(Optional.of(manage));
 
-            roleService.updateRolePermissions("ADMIN", List.of("ROLE:MANAGE"));
+            roleService.updateRolePermissions("admin", List.of("role:manage"));
 
             assertThat(admin.hasPermission("ROLE:MANAGE")).isTrue();
+        }
+
+        @Test
+        @DisplayName("다른 역할 · 다른 권한은 표기와 상관없이 보호 대상이 아니다")
+        void otherRolesNotProtected() {
+            Role manager = Role.createRole("MANAGER", "매니저", null);
+            given(roleRepository.findByCode("manager")).willReturn(Optional.of(manager));
+
+            roleService.deleteRole("manager");
+
+            assertThat(manager.getIsDeleted()).isEqualTo(io.groo.core.type.YNType.Y);
         }
     }
 }

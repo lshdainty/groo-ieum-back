@@ -116,7 +116,6 @@ public class RoleServiceImpl implements RoleService {
     @Transactional
     public void updateRoleWithPermissions(String roleCode, String name, String desc, List<String> permissionCodes) {
         log.debug("역할 수정 (권한 포함) 시작: roleCode={}", roleCode);
-        requireAdminKeepsRoleManage(roleCode, permissionCodes);
         Role role = getRole(roleCode);
 
         List<Permission> permissions = permissionCodes.stream()
@@ -126,6 +125,7 @@ public class RoleServiceImpl implements RoleService {
                             return new EntityNotFoundException(HrErrorCode.PERMISSION_NOT_FOUND);
                         }))
                 .collect(Collectors.toList());
+        requireAdminKeepsRoleManage(role, permissions);
 
         Set<String> before = permissionCodesOf(role);
         applyNameAndDesc(role, name, desc, permissions);
@@ -158,7 +158,6 @@ public class RoleServiceImpl implements RoleService {
     @Transactional
     public void updateRolePermissions(String roleCode, List<String> permissionCodes) {
         log.debug("역할 권한 수정 시작: roleCode={}", roleCode);
-        requireAdminKeepsRoleManage(roleCode, permissionCodes);
         Role role = getRole(roleCode);
 
         List<Permission> permissions = permissionCodes.stream()
@@ -168,6 +167,7 @@ public class RoleServiceImpl implements RoleService {
                             return new EntityNotFoundException(HrErrorCode.PERMISSION_NOT_FOUND);
                         }))
                 .collect(Collectors.toList());
+        requireAdminKeepsRoleManage(role, permissions);
 
         Set<String> before = permissionCodesOf(role);
         role.clearPermissions();
@@ -194,16 +194,16 @@ public class RoleServiceImpl implements RoleService {
     @Transactional
     public void removePermissionFromRole(String roleCode, String permissionCode) {
         log.debug("역할에서 권한 제거 시작: roleCode={}, permissionCode={}", roleCode, permissionCode);
-        if (SYSTEM_ADMIN_ROLE.equals(roleCode) && ROLE_MANAGE_PERMISSION.equals(permissionCode)) {
-            log.warn("권한 제거 거부 - 관리자 역할의 역할 관리 권한");
-            throw new BusinessRuleViolationException(HrErrorCode.SYSTEM_ROLE_PROTECTED);
-        }
         Role role = getRole(roleCode);
         Permission permission = permissionRepository.findByCode(permissionCode)
                 .orElseThrow(() -> {
                     log.warn("권한 제거 실패 - 존재하지 않는 권한: permissionCode={}", permissionCode);
                     return new EntityNotFoundException(HrErrorCode.PERMISSION_NOT_FOUND);
                 });
+        if (isSystemAdminRole(role) && isRoleManagePermission(permission)) {
+            log.warn("권한 제거 거부 - 관리자 역할의 역할 관리 권한");
+            throw new BusinessRuleViolationException(HrErrorCode.SYSTEM_ROLE_PROTECTED);
+        }
         Set<String> before = permissionCodesOf(role);
         role.removePermission(permission);
         revokeHoldersIfPermissionsShrank(role, before);
@@ -214,15 +214,15 @@ public class RoleServiceImpl implements RoleService {
     @Transactional
     public void deleteRole(String roleCode) {
         log.debug("역할 삭제 시작: roleCode={}", roleCode);
-        if (SYSTEM_ADMIN_ROLE.equals(roleCode)) {
-            log.warn("역할 삭제 거부 - 시스템 필수 역할: roleCode={}", roleCode);
-            throw new BusinessRuleViolationException(HrErrorCode.SYSTEM_ROLE_PROTECTED);
-        }
         Role role = roleRepository.findByCode(roleCode)
                 .orElseThrow(() -> {
                     log.warn("역할 삭제 실패 - 존재하지 않는 역할: roleCode={}", roleCode);
                     return new EntityNotFoundException(HrErrorCode.ROLE_NOT_FOUND);
                 });
+        if (isSystemAdminRole(role)) {
+            log.warn("역할 삭제 거부 - 시스템 필수 역할: roleCode={}", role.getCode());
+            throw new BusinessRuleViolationException(HrErrorCode.SYSTEM_ROLE_PROTECTED);
+        }
         role.deleteRole();
         // 부여 기록도 함께 지운다 — 목록에서만 사라지고 가진 사람의 권한에는 남던 것을 막는다(보안 점검 IEU-5)
         List<UserRole> grants = roleRepository.findActiveUserRolesByRole(role);
@@ -287,15 +287,15 @@ public class RoleServiceImpl implements RoleService {
     @Transactional
     public void deletePermission(String permissionCode) {
         log.debug("권한 삭제 시작: permissionCode={}", permissionCode);
-        if (ROLE_MANAGE_PERMISSION.equals(permissionCode)) {
-            log.warn("권한 삭제 거부 - 시스템 필수 권한: permissionCode={}", permissionCode);
-            throw new BusinessRuleViolationException(HrErrorCode.SYSTEM_ROLE_PROTECTED);
-        }
         Permission permission = permissionRepository.findByCode(permissionCode)
                 .orElseThrow(() -> {
                     log.warn("권한 삭제 실패 - 존재하지 않는 권한: permissionCode={}", permissionCode);
                     return new EntityNotFoundException(HrErrorCode.PERMISSION_NOT_FOUND);
                 });
+        if (isRoleManagePermission(permission)) {
+            log.warn("권한 삭제 거부 - 시스템 필수 권한: permissionCode={}", permission.getCode());
+            throw new BusinessRuleViolationException(HrErrorCode.SYSTEM_ROLE_PROTECTED);
+        }
         permission.deletePermission();
         // 역할 매핑도 함께 지운다 — 삭제한 권한이 역할을 통해 계속 실리지 않게(보안 점검 IEU-5)
         List<RolePermission> mappings = permissionRepository.findActiveRolePermissionsByPermission(permission);
@@ -326,9 +326,23 @@ public class RoleServiceImpl implements RoleService {
                 .forEach(grant -> tokenRevocationService.revokeAllForUser(grant.getUser().getId()));
     }
 
-    /** 관리자 역할의 권한 목록을 통째로 바꿀 때 역할 관리 권한이 빠지면 거절한다 */
-    private static void requireAdminKeepsRoleManage(String roleCode, List<String> permissionCodes) {
-        if (SYSTEM_ADMIN_ROLE.equals(roleCode) && permissionCodes != null && !permissionCodes.contains(ROLE_MANAGE_PERMISSION)) {
+    /*
+     * 필수 역할 · 권한 판별은 입력 문자열이 아니라 찾아온 엔티티의 코드로 한다.
+     * 조회(findByCode)는 DB 콜레이션(utf8mb4_unicode_ci)을 따라 대소문자 · 끝 공백을 가리지 않아
+     * "admin" · "ADMIN " · "role:manage" 로도 실제 ADMIN · ROLE:MANAGE 행이 찾아진다 — 입력값을 글자 그대로
+     * 비교하면 이 표기로 보호를 건너뛴다(보안 점검 IEU-5 3차, groo-sso-back#85 와 같은 원리)
+     */
+    private static boolean isSystemAdminRole(Role role) {
+        return SYSTEM_ADMIN_ROLE.equals(role.getCode());
+    }
+
+    private static boolean isRoleManagePermission(Permission permission) {
+        return ROLE_MANAGE_PERMISSION.equals(permission.getCode());
+    }
+
+    /** 관리자 역할의 권한 목록을 통째로 바꿀 때 역할 관리 권한이 빠지면 거절한다 — 둘 다 찾아온 엔티티 코드로 본다 */
+    private static void requireAdminKeepsRoleManage(Role role, List<Permission> permissions) {
+        if (isSystemAdminRole(role) && permissions.stream().noneMatch(RoleServiceImpl::isRoleManagePermission)) {
             log.warn("역할 권한 수정 거부 - 관리자 역할에서 역할 관리 권한을 뺌");
             throw new BusinessRuleViolationException(HrErrorCode.SYSTEM_ROLE_PROTECTED);
         }
