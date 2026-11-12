@@ -96,6 +96,7 @@ class JwtAuthenticationFilterTest {
         void renewsCookie() throws Exception {
             given(jwtTokenProvider.getRemainingExpiration(TOKEN)).willReturn(300_000L); // 5분
             User user = org.mockito.Mockito.mock(User.class);
+            linkTo(user, 7L);
             given(user.getRoles()).willReturn(new java.util.ArrayList<>());
             given(user.getAllAuthorities()).willReturn(List.of());
             given(userService.findUserById("user1")).willReturn(user);
@@ -106,6 +107,26 @@ class JwtAuthenticationFilterTest {
             assertThat(setCookie).contains("hr_access_token=" + RENEWED);
             assertThat(setCookie).contains("HttpOnly");
             assertThat(SecurityContextHolder.getContext().getAuthentication()).isNotNull();
+        }
+    }
+
+    @Nested
+    @DisplayName("보안 점검 IEU-6 - 갱신 구간인데 행의 연결 번호가 토큰과 다르면")
+    class WhenRowSwapped {
+
+        @Test
+        @DisplayName("성공 - 그 행(예: 관리자)의 권한으로 새 토큰을 만들지 않는다")
+        void doesNotRenewSwappedRow() throws Exception {
+            given(jwtTokenProvider.getRemainingExpiration(TOKEN)).willReturn(300_000L);
+            User adminRow = org.mockito.Mockito.mock(User.class);
+            linkTo(adminRow, 1L);
+            given(userService.findUserById("user1")).willReturn(adminRow);
+
+            MockHttpServletResponse response = runFilter();
+
+            assertThat(response.getHeader("Set-Cookie")).isNull();
+            org.mockito.Mockito.verify(jwtTokenProvider, org.mockito.Mockito.never())
+                    .createHrAccessToken(any(User.class), anyList(), anyList(), org.mockito.ArgumentMatchers.anyBoolean());
         }
     }
 
@@ -213,6 +234,7 @@ class JwtAuthenticationFilterTest {
             io.groo.ieum.permission.domain.Role userRole = org.mockito.Mockito.mock(io.groo.ieum.permission.domain.Role.class);
             given(userRole.getCode()).willReturn("USER");
             User user = org.mockito.Mockito.mock(User.class);
+            linkTo(user, 7L);
             given(user.getRoles()).willReturn(List.of(userRole));
             given(user.getAllAuthorities()).willReturn(List.of("USER", "USER:EDIT"));
             given(userService.findUserById("user1")).willReturn(user);
@@ -238,6 +260,20 @@ class JwtAuthenticationFilterTest {
                 assertThat(currentAuthorities()).as(method).doesNotContain("ROLE:MANAGE", "USER:MANAGE");
                 SecurityContextHolder.clearContext();
             }
+        }
+
+        @Test
+        @DisplayName("보안 점검 IEU-6 - 아이디가 같아도 행의 연결 번호가 토큰과 다르면(아이디 바꿔치기) 쓰기 요청을 인증하지 않는다")
+        void swappedRowWriteNotAuthenticated() throws Exception {
+            // 토큰은 연결 번호 7 의 사용자, DB 에서 같은 아이디를 가진 행은 연결 번호 1(관리자 행에 아이디를 덮어씀)
+            User adminRow = org.mockito.Mockito.mock(User.class);
+            linkTo(adminRow, 1L);
+            lenient().when(adminRow.getAllAuthorities()).thenReturn(List.of("ADMIN", "ROLE:MANAGE"));
+            given(userService.findUserById("user1")).willReturn(adminRow);
+
+            runFilter("PUT");
+
+            assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
         }
 
         @Test
@@ -356,5 +392,11 @@ class JwtAuthenticationFilterTest {
             assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
             org.mockito.Mockito.verifyNoInteractions(userService);
         }
+    }
+
+    /** 실제 대조 로직(User.isLinkedToSsoUser)을 쓰도록 연결 번호를 심는다 */
+    private static void linkTo(User user, Long ssoUserRowId) {
+        lenient().when(user.getSsoUserRowId()).thenReturn(ssoUserRowId);
+        lenient().when(user.isLinkedToSsoUser(org.mockito.ArgumentMatchers.any())).thenCallRealMethod();
     }
 }
