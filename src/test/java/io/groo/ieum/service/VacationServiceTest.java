@@ -1480,7 +1480,7 @@ class VacationServiceTest {
 
             // when & then
             assertThatThrownBy(() -> vacationService.manualGrantVacation(userId, data))
-                    .isInstanceOf(io.groo.core.exception.InvalidValueException.class);
+                    .isInstanceOf(InvalidValueException.class);
         }
     }
 
@@ -1729,7 +1729,7 @@ class VacationServiceTest {
         void getAllUsersVacationSummaryFailNullYear() {
             // when & then
             assertThatThrownBy(() -> vacationService.getAllUsersVacationSummary(null))
-                    .isInstanceOf(io.groo.core.exception.InvalidValueException.class);
+                    .isInstanceOf(InvalidValueException.class);
         }
     }
 
@@ -1886,6 +1886,55 @@ class VacationServiceTest {
     @Nested
     @DisplayName("휴가 사용")
     class UseVacation {
+        private VacationServiceDto period(LocalDateTime start, LocalDateTime end) {
+            return VacationServiceDto.builder()
+                    .userId("user1").type(VacationType.ANNUAL).timeType(VacationTimeType.DAYOFF)
+                    .startDate(start).endDate(end).desc("기간 검사").build();
+        }
+
+        @Test
+        @DisplayName("실패 - 0001년 ~ 9999년 같은 기간은 사용자 조회 · 날짜 계산 전에 거절한다 (IEU-4)")
+        void useVacationRejectsHugePeriodFirst() {
+            VacationServiceDto data = period(LocalDateTime.of(1, 1, 1, 0, 0), LocalDateTime.of(9999, 12, 31, 23, 59));
+
+            assertThatThrownBy(() -> vacationService.useVacation(data))
+                    .isInstanceOf(InvalidValueException.class);
+            then(userService).shouldHaveNoInteractions();
+            then(holidayRepository).shouldHaveNoInteractions();
+        }
+
+        @Test
+        @DisplayName("실패 - 시작일부터 꼭 1년이 되는 날까지는 상한을 넘는다")
+        void useVacationRejectsOneFullYear() {
+            VacationServiceDto data = period(LocalDateTime.of(2026, 3, 2, 0, 0), LocalDateTime.of(2027, 3, 2, 23, 59));
+
+            assertThatThrownBy(() -> vacationService.useVacation(data))
+                    .isInstanceOf(InvalidValueException.class);
+            then(userService).shouldHaveNoInteractions();
+        }
+
+        @Test
+        @DisplayName("성공 - 1년 하루 전까지는 상한을 통과해 다음 단계(사용자 확인)로 간다")
+        void useVacationAllowsJustUnderOneYear() {
+            VacationServiceDto data = period(LocalDateTime.of(2026, 3, 2, 0, 0), LocalDateTime.of(2027, 3, 1, 23, 59));
+            given(userService.checkUserExist("user1"))
+                    .willThrow(new EntityNotFoundException(HrErrorCode.USER_NOT_FOUND));
+
+            assertThatThrownBy(() -> vacationService.useVacation(data))
+                    .isInstanceOf(EntityNotFoundException.class);
+        }
+
+        @Test
+        @DisplayName("실패 - 종료가 시작보다 앞서거나 비어 있으면 거절한다")
+        void useVacationRejectsReversedOrMissing() {
+            assertThatThrownBy(() -> vacationService.useVacation(
+                    period(LocalDateTime.of(2026, 3, 2, 9, 0), LocalDateTime.of(2026, 3, 1, 18, 0))))
+                    .isInstanceOf(InvalidValueException.class);
+            assertThatThrownBy(() -> vacationService.useVacation(period(null, LocalDateTime.of(2026, 3, 1, 18, 0))))
+                    .isInstanceOf(InvalidValueException.class);
+            then(userService).shouldHaveNoInteractions();
+        }
+
         @Test
         @DisplayName("성공 - 분단위 사용이 허용된 정책이 있으면 HALFTIMEOFF 휴가를 사용할 수 있다")
         void useVacationWithMinuteTypeSuccess() {
