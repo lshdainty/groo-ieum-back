@@ -172,13 +172,27 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         // JwtClaimsPrincipal 생성 (User는 필요할 때 Lazy Loading)
         JwtClaimsPrincipal principal = new JwtClaimsPrincipal(
                 userId, ssoUserRowId, name, email, roles, permissions,
-                () -> userService.findUserById(userId),  // Lazy Loading Supplier
+                () -> findLinkedHrUser(userId, ssoUserRowId),  // Lazy Loading Supplier — 연결 번호까지 대조(IEU-6)
                 jwtTokenProvider.isPasswordChangeRequiredFromHrToken(token)
         );
 
         log.debug("HR JWT 인증 성공 (DB 조회 없음): userId={}, authorities={}", userId, authorities.size());
 
         return new UsernamePasswordAuthenticationToken(principal, null, authorities);
+    }
+
+    /**
+     * HR 토큰의 로그인 아이디로 행을 찾고, 토큰의 연결 번호(ssoUserRowId 클레임)가 그 행의 연결 번호와 같은지 대조한다.<br>
+     * 로그인 아이디는 SSO 이벤트로 바뀔 수 있는 값이라, 아이디만으로 찾으면 위조 이벤트로 아이디를 바꿔치기한
+     * 남의 행(예: 관리자)의 권한으로 인가 · 갱신된다(보안 점검 IEU-6). 다르면 인증 실패로 본다.
+     */
+    private User findLinkedHrUser(String userId, Long ssoUserRowId) {
+        User user = userService.findUserById(userId);
+        if (!user.isLinkedToSsoUser(ssoUserRowId)) {
+            log.warn("HR 토큰 거절 — 연결 번호 불일치: userId={}", userId);
+            throw new UnauthorizedException(ErrorCode.UNAUTHORIZED);
+        }
+        return user;
     }
 
     private boolean isStateChanging(HttpServletRequest request) {
@@ -195,11 +209,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private Authentication reloadAuthoritiesFromDb(String token, Authentication fromToken) {
         UserPrincipal tokenPrincipal = (UserPrincipal) fromToken.getPrincipal();
         String userId = jwtTokenProvider.getUserId(token);
+        Long ssoUserRowId = jwtTokenProvider.getSsoUserRowIdFromHrToken(token);
         User user;
         try {
-            user = userService.findUserById(userId);
+            user = findLinkedHrUser(userId, ssoUserRowId);
         } catch (Exception e) {
-            log.warn("상태 변경 요청 인증 거절 — 사용자 없음/삭제: userId={}", userId);
+            log.warn("상태 변경 요청 인증 거절 — 사용자 없음/삭제/연결 번호 불일치: userId={}", userId);
             return null;
         }
         List<String> roles = user.getRoles().stream().map(Role::getCode).collect(Collectors.toList());
@@ -220,7 +235,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 roles, permissions,
                 // 컨트롤러가 쓰는 User 는 지금처럼 필요할 때 읽는다 — 필터에서 읽은 엔티티는 요청의
                 // 영속성 컨텍스트 밖이라 지연 로딩이 깨질 수 있어 넘기지 않는다
-                () -> userService.findUserById(userId),
+                () -> findLinkedHrUser(userId, ssoUserRowId),
                 tokenPrincipal.isPasswordChangeRequired()
         );
         log.debug("상태 변경 요청 — DB 권한으로 인증: userId={}, authorities={}", userId, authorities.size());
@@ -306,9 +321,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String userId = jwtTokenProvider.getUserId(token);
         User user;
         try {
-            user = userService.findUserById(userId);
+            user = findLinkedHrUser(userId, jwtTokenProvider.getSsoUserRowIdFromHrToken(token));
         } catch (Exception e) {
-            log.warn("HR 토큰 갱신 거절 — 사용자 없음/삭제: userId={}", userId);
+            log.warn("HR 토큰 갱신 거절 — 사용자 없음/삭제/연결 번호 불일치: userId={}", userId);
             return;
         }
         List<String> roles = user.getRoles().stream().map(Role::getCode).collect(Collectors.toList());

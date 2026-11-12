@@ -62,6 +62,7 @@ class PasswordChangeRequiredTest {
         when(user.getEmail()).thenReturn("user1@example.com");
         when(user.getRoles()).thenReturn(new java.util.ArrayList<>());
         when(user.getAllAuthorities()).thenReturn(List.of());
+        when(user.isLinkedToSsoUser(org.mockito.ArgumentMatchers.any())).thenCallRealMethod();
         when(userService.findUserById("user1")).thenReturn(user);
         filter = new JwtAuthenticationFilter(provider, userService, props,
                 mock(TokenRevocationService.class), JsonMapper.builder().build());
@@ -155,7 +156,6 @@ class PasswordChangeRequiredTest {
         doReturn(true).when(provider).isSsoAccessTokenForHr("sso");
         doReturn("user1").when(provider).getUserId("sso");
         doReturn(7L).when(provider).getUserNoFromSsoToken("sso");
-        when(user.isLinkedToSsoUser(7L)).thenCallRealMethod();
 
         doReturn(true).when(provider).isPasswordChangeRequiredFromSsoToken("sso");
         MockHttpServletRequest req = new MockHttpServletRequest("GET", "/api/v1/users");
@@ -230,7 +230,6 @@ class PasswordChangeRequiredTest {
         when(p.getServicesFromSsoToken("s")).thenReturn(List.of("hr"));
         when(p.getUserIdFromSsoToken("s")).thenReturn("user1");
         when(p.getUserNoFromSsoToken("s")).thenReturn(7L);
-        when(user.isLinkedToSsoUser(7L)).thenCallRealMethod();
         when(p.isPasswordChangeRequiredFromSsoToken("s")).thenReturn(true);
         when(p.createHrAccessToken(any(User.class), any(), any(), org.mockito.ArgumentMatchers.eq(true))).thenReturn("hr-y");
 
