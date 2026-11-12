@@ -128,6 +128,58 @@ class UserServiceTest {
                     .isInstanceOf(io.groo.core.exception.InvalidValueException.class);
             assertThat(user.getName()).isEqualTo("초대받은이");
         }
+
+        @Test
+        @DisplayName("실패 - 초대 수정으로 소속을 내부 표식(SYSTEM)으로 바꾸지 못한다")
+        void editInvitationFailSystemCompany() {
+            User user = invitedUser();
+            given(userRepository.findById("invited1")).willReturn(Optional.of(user));
+            given(ssoApiClient.getInvitationStatus(List.of(99L))).willReturn(List.of(status("PENDING")));
+
+            assertThatThrownBy(() -> userService.editInvitation("invited1",
+                    UserServiceDto.builder().company("SYSTEM").build()))
+                    .isInstanceOf(io.groo.core.exception.InvalidValueException.class);
+            assertThat(user.getCompany()).isEqualTo("NONE");
+        }
+    }
+
+    @Nested
+    @DisplayName("보안 점검 IEU-3 - 소속 내부 표식(SYSTEM) 설정 차단")
+    class SystemCompanyGuard {
+        @Test
+        @DisplayName("실패 - 가입 경로로 SYSTEM 소속 사용자를 만들지 못한다")
+        void joinUserFailSystemCompany() {
+            UserServiceDto data = UserServiceDto.builder()
+                    .ssoUserRowId(1L).id("user1").name("테스트유저").email("test@test.com")
+                    .company("SYSTEM").build();
+
+            assertThatThrownBy(() -> userService.joinUser(data))
+                    .isInstanceOf(io.groo.core.exception.InvalidValueException.class);
+            then(userRepository).should(never()).save(any(User.class));
+        }
+
+        @Test
+        @DisplayName("실패 - 초대 경로로 SYSTEM 소속을 넣으면 SSO 에 초대를 보내기 전에 거절한다")
+        void inviteUserFailSystemCompany() {
+            UserServiceDto data = UserServiceDto.builder()
+                    .id("user1").name("테스트유저").email("test@test.com").company("system ").build();
+
+            assertThatThrownBy(() -> userService.inviteUser(data))
+                    .isInstanceOf(io.groo.core.exception.InvalidValueException.class);
+            then(ssoApiClient).shouldHaveNoInteractions();
+            then(userRepository).should(never()).save(any(User.class));
+        }
+
+        @Test
+        @DisplayName("판별 - 대소문자 · 앞뒤 공백이 달라도 같은 내부 표식으로 본다(DB 콜레이션과 같은 기준)")
+        void isSystemCompanyMatchesCollation() {
+            assertThat(User.isSystemCompany("SYSTEM")).isTrue();
+            assertThat(User.isSystemCompany("system")).isTrue();
+            assertThat(User.isSystemCompany(" System ")).isTrue();
+            assertThat(User.isSystemCompany("NONE")).isFalse();
+            assertThat(User.isSystemCompany("SYSTEMS")).isFalse();
+            assertThat(User.isSystemCompany(null)).isFalse();
+        }
     }
 
     @Nested
@@ -560,6 +612,66 @@ class UserServiceTest {
             assertEditDenied(UserServiceDto.builder().id("user1").name("바꿈").roleNames(List.of("ADMIN")).build(), "user1", false);
             assertThat(user.getName()).isEqualTo("이서준");
             assertThat(user.getRoles()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("실패 - 본인이라도 소속을 내부 표식(SYSTEM)으로 바꾸면 403 이고 바뀌지 않는다 (IEU-3)")
+        void editUserFailSelfCompanyToSystem() {
+            User user = createTestUser("user1", "이서준", "user1@test.com");
+            given(userRepository.findById("user1")).willReturn(Optional.of(user));
+            assertEditDenied(UserServiceDto.builder().id("user1").company("SYSTEM").build(), "user1", false);
+            assertThat(user.getCompany()).isEqualTo("NONE");
+        }
+
+        @Test
+        @DisplayName("실패 - 본인이 다른 소속으로 바꾸는 것도 관리 권한 없이는 403")
+        void editUserFailSelfCompanyChange() {
+            User user = createTestUser("user1", "이서준", "user1@test.com");
+            given(userRepository.findById("user1")).willReturn(Optional.of(user));
+            assertEditDenied(UserServiceDto.builder().id("user1").name("이하은").company("OTHER").build(), "user1", false);
+            assertThat(user.getCompany()).isEqualTo("NONE");
+            assertThat(user.getName()).isEqualTo("이서준");
+        }
+
+        @Test
+        @DisplayName("성공 - 본인이 같은 소속 값을 다시 보내는 프로필 저장은 그대로 된다")
+        void editUserSuccessSelfSameCompany() {
+            User user = createTestUser("user1", "이서준", "user1@test.com");
+            given(userRepository.findById("user1")).willReturn(Optional.of(user));
+            userService.editUser(UserServiceDto.builder().id("user1").name("이하은").company("NONE").build(), "user1", false);
+            assertThat(user.getName()).isEqualTo("이하은");
+            assertThat(user.getCompany()).isEqualTo("NONE");
+        }
+
+        @Test
+        @DisplayName("실패 - 관리 권한이 있어도 소속을 내부 표식(SYSTEM)으로는 바꾸지 못한다")
+        void editUserFailManagerCompanyToSystem() {
+            User user = createTestUser("user1", "이서준", "user1@test.com");
+            given(userRepository.findById("user1")).willReturn(Optional.of(user));
+            assertThatThrownBy(() -> userService.editUser(
+                    UserServiceDto.builder().id("user1").company("System").build(), "admin", true))
+                    .isInstanceOf(io.groo.core.exception.InvalidValueException.class);
+            assertThat(user.getCompany()).isEqualTo("NONE");
+        }
+
+        @Test
+        @DisplayName("성공 - 관리 권한이 있으면 다른 소속으로 바꾼다")
+        void editUserSuccessManagerCompanyChange() {
+            User user = createTestUser("user1", "이서준", "user1@test.com");
+            given(userRepository.findById("user1")).willReturn(Optional.of(user));
+            userService.editUser(UserServiceDto.builder().id("user1").company("OTHER").build(), "admin", true);
+            assertThat(user.getCompany()).isEqualTo("OTHER");
+        }
+
+        @Test
+        @DisplayName("성공 - 이미 SYSTEM 인 내부 계정은 같은 값으로 저장해도 거절하지 않는다")
+        void editUserSuccessSystemAccountKeepsCompany() {
+            User user = User.createUser(null, "system", "시스템", "system@test.com",
+                    LocalDate.of(1990, 1, 1), "SYSTEM", "9 ~ 18",
+                    LocalDate.now(), YNType.N, null, null, CountryCode.KR);
+            given(userRepository.findById("system")).willReturn(Optional.of(user));
+            userService.editUser(UserServiceDto.builder().id("system").name("시스템2").company("SYSTEM").build(), "system", false);
+            assertThat(user.getName()).isEqualTo("시스템2");
         }
 
         @Test
