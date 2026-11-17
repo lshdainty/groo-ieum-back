@@ -32,4 +32,12 @@ public interface UserPrincipal extends AuditorPrincipal {
     default boolean isPasswordChangeRequired() {
         return false;
     }
+
+    /**
+     * 이 인증을 만든 HR 토큰의 SSO 로그인 번호(sso_sid 클레임). 클레임이 없는 토큰이나 SSO 토큰 직통 인증은 null.
+     * 같은 로그인을 잇는 재발급이 새 HR 토큰에 옮겨 싣는 데 쓴다(보안 점검 CLI-6).
+     */
+    default String getSsoSid() {
+        return null;
+    }
 }

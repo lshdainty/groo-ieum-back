@@ -1,7 +1,9 @@
 package io.groo.ieum.security.service;
 
+import io.groo.core.exception.ForbiddenException;
 import io.groo.core.exception.UnauthorizedException;
 import io.groo.ieum.client.sso.SsoApiClient;
+import io.groo.ieum.common.exception.HrErrorCode;
 import io.groo.ieum.security.controller.dto.TokenExchangeDto;
 import io.groo.ieum.security.jwt.JwtTokenProvider;
 import io.groo.ieum.user.domain.User;
@@ -12,6 +14,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.redis.core.StringRedisTemplate;
 
 import java.util.Collections;
 import java.util.List;
@@ -21,7 +24,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -36,6 +41,7 @@ class TokenExchangeServiceTest {
     @Mock private JwtTokenProvider jwtTokenProvider;
     @Mock private UserService userService;
     @Mock private SsoApiClient ssoApiClient;
+    @Mock private ServiceLogoutStore serviceLogoutStore;
 
     @InjectMocks private TokenExchangeService sut;
 
@@ -60,7 +66,7 @@ class TokenExchangeServiceTest {
         given(user.getEmail()).willReturn("hong@porest.com");
         given(userService.findUserById("user1")).willReturn(user);
 
-        given(jwtTokenProvider.createHrAccessToken(eq(user), anyList(), anyList(), eq(false))).willReturn("hrToken");
+        given(jwtTokenProvider.createHrAccessToken(eq(user), anyList(), anyList(), eq(false), any())).willReturn("hrToken");
         given(jwtTokenProvider.getHrAccessExpirationSeconds()).willReturn(3600L);
 
         TokenExchangeDto.ExchangeResult result = sut.exchangeCode("code", "verifier", "https://hr/cb");
@@ -94,7 +100,7 @@ class TokenExchangeServiceTest {
 
         assertThatThrownBy(() -> sut.exchange("ssoToken"))
                 .isInstanceOf(UnauthorizedException.class);
-        verify(jwtTokenProvider, never()).createHrAccessToken(any(User.class), anyList(), anyList(), anyBoolean());
+        verify(jwtTokenProvider, never()).createHrAccessToken(any(User.class), anyList(), anyList(), anyBoolean(), any());
     }
 
     @Test
@@ -138,7 +144,7 @@ class TokenExchangeServiceTest {
                 .willReturn(relinked);
         given(ssoApiClient.getLinkedFrom(1L)).willReturn(List.of(101L));
         given(userService.relinkMergedSsoUser(1L, List.of(101L), "boss", "대표", "boss@example.com")).willReturn(true);
-        given(jwtTokenProvider.createHrAccessToken(eq(relinked), anyList(), anyList(), eq(false))).willReturn("hrToken");
+        given(jwtTokenProvider.createHrAccessToken(eq(relinked), anyList(), anyList(), eq(false), any())).willReturn("hrToken");
 
         assertThat(sut.exchange("ssoToken").getAccessToken()).isEqualTo("hrToken");
     }
@@ -163,7 +169,7 @@ class TokenExchangeServiceTest {
         User user = linkedUser(1L);
         given(user.getRoles()).willReturn(Collections.emptyList());
         given(user.getAllAuthorities()).willReturn(Collections.emptyList());
-        given(jwtTokenProvider.createHrAccessToken(eq(user), anyList(), anyList(), eq(false))).willReturn("hrToken");
+        given(jwtTokenProvider.createHrAccessToken(eq(user), anyList(), anyList(), eq(false), any())).willReturn("hrToken");
 
         sut.exchange("ssoToken");
 
@@ -199,5 +205,109 @@ class TokenExchangeServiceTest {
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> sut.exchange("ssoToken"))
                 .isInstanceOf(io.groo.core.exception.EntityNotFoundException.class);
         verify(userService, org.mockito.Mockito.never()).relinkMergedSsoUser(any(), anyList(), any(), any(), any());
+    }
+
+    // ── 보안 점검 CLI-6 — 이음에서 로그아웃한 SSO 로그인(sid)으로 돌아오면 거절한다 ──
+
+    /** 로그아웃 목록 대조까지만 가는 SSO 토큰 — 거절되면 사용자 번호는 읽지 않는다 */
+    private void ssoTokenWithSid(String sid) {
+        given(jwtTokenProvider.validateSsoToken("ssoToken")).willReturn(true);
+        given(jwtTokenProvider.getServicesFromSsoToken("ssoToken")).willReturn(List.of("hr"));
+        given(jwtTokenProvider.getUserIdFromSsoToken("ssoToken")).willReturn("user1");
+        given(jwtTokenProvider.getSidFromSsoToken("ssoToken")).willReturn(sid);
+    }
+
+    private User loginableUser() {
+        User user = linkedUser(1L);
+        given(user.getRoles()).willReturn(Collections.emptyList());
+        given(user.getAllAuthorities()).willReturn(Collections.emptyList());
+        return user;
+    }
+
+    @Test
+    @DisplayName("보안 점검 CLI-6 - 이음에서 로그아웃한 sid 의 SSO 토큰이면 AUTH_010 으로 거절하고 HR 토큰을 내주지 않는다")
+    void exchangeRejectsLoggedOutSsoLogin() {
+        ssoTokenWithSid("sid-out");
+        given(serviceLogoutStore.isLoggedOut("sid-out")).willReturn(true);
+
+        assertThatThrownBy(() -> sut.exchange("ssoToken"))
+                .isInstanceOfSatisfying(UnauthorizedException.class, e -> {
+                    assertThat(e.getErrorCode()).isEqualTo(HrErrorCode.SSO_LOGIN_LOGGED_OUT);
+                    assertThat(e.getErrorCode().getCode()).isEqualTo("AUTH_010");
+                    assertThat(e.getErrorCode().getHttpStatus().value()).isEqualTo(401);
+                });
+
+        verify(jwtTokenProvider, never()).createHrAccessToken(any(User.class), anyList(), anyList(), anyBoolean(), any());
+        // 거절한 로그인으로는 사용자 조회 · 재연결(SSO 호출)도 하지 않는다
+        verify(userService, never()).findUserById(any());
+        verify(ssoApiClient, never()).getLinkedFrom(any());
+    }
+
+    @Test
+    @DisplayName("보안 점검 CLI-6 - 인가코드 교환도 같은 검사를 탄다")
+    void exchangeCodeRejectsLoggedOutSsoLogin() {
+        given(ssoApiClient.exchangeOAuthCode("code", "verifier", "https://hr/cb")).willReturn("ssoToken");
+        ssoTokenWithSid("sid-out");
+        given(serviceLogoutStore.isLoggedOut("sid-out")).willReturn(true);
+
+        assertThatThrownBy(() -> sut.exchangeCode("code", "verifier", "https://hr/cb"))
+                .isInstanceOfSatisfying(UnauthorizedException.class,
+                        e -> assertThat(e.getErrorCode()).isEqualTo(HrErrorCode.SSO_LOGIN_LOGGED_OUT));
+    }
+
+    @Test
+    @DisplayName("보안 점검 CLI-6 - 로그아웃 목록에 없는 새 sid 는 통과하고, 그 sid 를 HR 토큰에 싣는다")
+    void exchangePassesNewSidAndCarriesIt() {
+        validSsoToken(1L);
+        User user = loginableUser();
+        given(jwtTokenProvider.getSidFromSsoToken("ssoToken")).willReturn("sid-new");
+        given(serviceLogoutStore.isLoggedOut("sid-new")).willReturn(false);
+        given(jwtTokenProvider.createHrAccessToken(eq(user), anyList(), anyList(), eq(false), eq("sid-new")))
+                .willReturn("hrToken");
+
+        assertThat(sut.exchange("ssoToken").getAccessToken()).isEqualTo("hrToken");
+    }
+
+    @Test
+    @DisplayName("보안 점검 CLI-6 - sid 가 없는 옛 SSO 토큰은 목록을 보지 않고 통과하며, HR 토큰에도 싣지 않는다")
+    void exchangeSkipsCheckWithoutSid() {
+        validSsoToken(1L);
+        User user = loginableUser();
+        given(jwtTokenProvider.getSidFromSsoToken("ssoToken")).willReturn(null);
+        given(jwtTokenProvider.createHrAccessToken(eq(user), anyList(), anyList(), eq(false), isNull()))
+                .willReturn("hrToken");
+
+        assertThat(sut.exchange("ssoToken").getAccessToken()).isEqualTo("hrToken");
+        verify(serviceLogoutStore, never()).isLoggedOut(any());
+    }
+
+    @Test
+    @DisplayName("보안 점검 CLI-6 - 이음 접근 권한이 없으면 로그아웃 여부보다 먼저 403 이다(비밀번호를 다시 묻지 않는다)")
+    void exchangeChecksServiceAccessBeforeLogoutList() {
+        given(jwtTokenProvider.validateSsoToken("ssoToken")).willReturn(true);
+        given(jwtTokenProvider.getServicesFromSsoToken("ssoToken")).willReturn(List.of("desk"));
+
+        assertThatThrownBy(() -> sut.exchange("ssoToken"))
+                .isInstanceOf(ForbiddenException.class);
+        verify(serviceLogoutStore, never()).isLoggedOut(any());
+    }
+
+    @Test
+    @DisplayName("보안 점검 CLI-6 - Redis 조회가 실패하면 로그인을 막지 않는다(fail-open)")
+    void exchangePassesWhenRedisFails() {
+        // 목이 아닌 진짜 저장소 — Redis 가 죽었을 때 교환까지 이어서 통과하는지 본다
+        StringRedisTemplate redis = mock(StringRedisTemplate.class);
+        given(redis.hasKey(anyString())).willThrow(new RuntimeException("redis down"));
+        TokenExchangeService withRealStore = new TokenExchangeService(
+                jwtTokenProvider, userService, ssoApiClient, new ServiceLogoutStore(redis));
+
+        validSsoToken(1L);
+        User user = loginableUser();
+        given(jwtTokenProvider.getSidFromSsoToken("ssoToken")).willReturn("sid-1");
+        given(jwtTokenProvider.createHrAccessToken(eq(user), anyList(), anyList(), eq(false), eq("sid-1")))
+                .willReturn("hrToken");
+
+        assertThat(withRealStore.exchange("ssoToken").getAccessToken()).isEqualTo("hrToken");
+        verify(redis).hasKey("ieum:logged-out-sid:sid-1");
     }
 }

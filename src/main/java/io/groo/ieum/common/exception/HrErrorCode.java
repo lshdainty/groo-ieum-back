@@ -127,6 +127,11 @@ public enum HrErrorCode implements ErrorCodeProvider {
     UNSUPPORTED_OAUTH_PROVIDER("AUTH_001", "error.auth.unsupported.provider", HttpStatus.BAD_REQUEST),
     OAUTH_PROVIDER_NOT_LINKED("AUTH_002", "error.oauth.provider.not.linked", HttpStatus.NOT_FOUND),
     PASSWORD_CHANGE_REQUIRED("AUTH_003", "error.auth.password.change.required", HttpStatus.FORBIDDEN),
+    /**
+     * 이음에서 로그아웃한 SSO 로그인으로 다시 들어오려 했다(보안 점검 CLI-6). 프런트가 이 코드("AUTH_010")로
+     * 구분해 SSO 에 비밀번호를 다시 받게 한다({@code prompt=login}) — 코드 문자열을 바꾸면 프런트도 같이 바꿔야 한다.
+     */
+    SSO_LOGIN_LOGGED_OUT("AUTH_010", "error.auth.sso.login.logged.out", HttpStatus.UNAUTHORIZED),
 
     // ========================================
     // NOTICE (공지사항)

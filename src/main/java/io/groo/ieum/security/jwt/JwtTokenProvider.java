@@ -45,6 +45,13 @@ public class JwtTokenProvider {
     /** 비밀번호 변경 필요 표식 클레임 — SSO access token 과 HR 토큰이 같은 이름·값('Y')을 쓴다. 없으면 N. */
     private static final String PWD_CHANGE_CLAIM = "pwdChange";
     private static final String PWD_CHANGE_REQUIRED = "Y";
+    /** SSO access token 의 로그인 번호 클레임 — 로그인 한 번(SSO 의 로그인 계열)을 가리킨다. 옛 토큰에는 없다. */
+    private static final String SSO_SID_CLAIM = "sid";
+    /**
+     * HR 토큰에 옮겨 싣는 SSO 로그인 번호 — 이 HR 토큰이 어느 SSO 로그인으로 만들어졌는지.
+     * 로그아웃 때 "이음에서 로그아웃함" 목록의 키가 된다(보안 점검 CLI-6).
+     */
+    static final String HR_SSO_SID_CLAIM = "sso_sid";
 
     @PostConstruct
     public void init() {
@@ -161,6 +168,24 @@ public class JwtTokenProvider {
     }
 
     /**
+     * SSO JWT 토큰의 로그인 번호(sid). 비밀번호로 다시 로그인하면 새 값이 나오고, 살아 있는 SSO 로그인으로
+     * 조용히 받은 토큰은 같은 값이다. 클레임이 없는 옛 토큰은 null.
+     */
+    public String getSidFromSsoToken(String token) {
+        return textClaim(getSsoClaims(token), SSO_SID_CLAIM);
+    }
+
+    /** 문자열 클레임 — 없거나 비어 있으면 null. 문자열이 아닌 값이 와도 예외 대신 글자로 읽는다. */
+    private static String textClaim(Claims claims, String name) {
+        Object value = claims.get(name);
+        if (value == null) {
+            return null;
+        }
+        String text = value.toString();
+        return text.isBlank() ? null : text;
+    }
+
+    /**
      * SSO JWT 토큰에서 Claims 추출
      *
      * @param token JWT 토큰
@@ -200,6 +225,17 @@ public class JwtTokenProvider {
     }
 
     /**
+     * HR Access Token 생성 (SSO 로그인 번호 포함) — 새 로그인(토큰 교환)과, 같은 로그인을 잇는 재발급이 쓴다.
+     *
+     * @param ssoSid 이 HR 토큰을 만든 SSO 로그인의 번호(sid). null 이면 싣지 않는다
+     */
+    public String createHrAccessToken(User user, List<String> roles, List<String> permissions,
+                                      boolean passwordChangeRequired, String ssoSid) {
+        return createHrAccessToken(user.getId(), user.getSsoUserRowId(),
+                user.getName(), user.getEmail(), roles, permissions, passwordChangeRequired, null, ssoSid);
+    }
+
+    /**
      * HR Access Token 생성 (claims 직접 전달)
      *
      * <p>슬라이딩 갱신처럼 이미 검증한 토큰의 claims 만 손에 있는 자리에서 쓴다 —
@@ -225,6 +261,18 @@ public class JwtTokenProvider {
                                       String name, String email,
                                       List<String> roles, List<String> permissions,
                                       boolean passwordChangeRequired, Date authTime) {
+        return createHrAccessToken(userId, ssoUserRowId, name, email, roles, permissions,
+                passwordChangeRequired, authTime, null);
+    }
+
+    /**
+     * @param authTime SSO 로그인(토큰 교환) 시각 — 갱신 때는 옛 토큰의 값을 그대로 옮긴다. null 이면 지금(새 로그인)
+     * @param ssoSid   SSO 로그인 번호(sid) — 갱신 때는 옛 토큰의 값을 그대로 옮긴다. null 이면 싣지 않는다
+     */
+    public String createHrAccessToken(String userId, Long ssoUserRowId,
+                                      String name, String email,
+                                      List<String> roles, List<String> permissions,
+                                      boolean passwordChangeRequired, Date authTime, String ssoSid) {
         Date now = new Date();
         Date expiration = new Date(now.getTime() + jwtProperties.getHrAccessExpiration());
         Date loggedInAt = authTime != null ? authTime : now;
@@ -245,6 +293,9 @@ public class JwtTokenProvider {
                 .claim(AUTH_TIME_CLAIM, loggedInAt.getTime() / 1000);
         if (passwordChangeRequired) {
             builder.claim(PWD_CHANGE_CLAIM, PWD_CHANGE_REQUIRED);
+        }
+        if (ssoSid != null && !ssoSid.isBlank()) {
+            builder.claim(HR_SSO_SID_CLAIM, ssoSid);
         }
         return builder
                 .signWith(hrKey)
@@ -269,6 +320,14 @@ public class JwtTokenProvider {
             return new Date(n.longValue() * 1000);
         }
         return claims.getIssuedAt();
+    }
+
+    /**
+     * HR 토큰이 실고 있는 SSO 로그인 번호(sso_sid). 이 클레임이 생기기 전에 발급된 토큰과, SSO 토큰에 sid 가
+     * 없던 로그인의 토큰은 null 이다.
+     */
+    public String getSsoSidFromHrToken(String token) {
+        return textClaim(getHrClaims(token), HR_SSO_SID_CLAIM);
     }
 
     /**

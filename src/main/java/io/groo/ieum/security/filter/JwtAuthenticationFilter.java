@@ -9,6 +9,7 @@ import io.groo.ieum.security.principal.UserPrincipal;
 import io.groo.ieum.security.jwt.JwtTokenProvider;
 import io.groo.ieum.security.principal.JwtClaimsPrincipal;
 import io.groo.ieum.security.principal.JwtUserPrincipal;
+import io.groo.ieum.security.service.ServiceLogoutStore;
 import io.groo.ieum.permission.domain.Role;
 import io.groo.ieum.user.domain.User;
 import io.groo.ieum.user.service.UserService;
@@ -51,7 +52,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final UserService userService;
     private final JwtProperties jwtProperties;
     private final io.groo.ieum.security.service.TokenRevocationService tokenRevocationService;
+    private final ServiceLogoutStore serviceLogoutStore;
     private final ObjectMapper objectMapper;
+
+    /**
+     * "이음에서 로그아웃한 SSO 로그인의 토큰이라 인증하지 않았다" 는 표식(요청 속성).
+     * 인증 실패 응답이 이걸 보고 코드 AUTH_010 으로 나간다({@link ServiceLogoutEntryPoint}).
+     */
+    public static final String SSO_LOGIN_LOGGED_OUT_ATTRIBUTE =
+            JwtAuthenticationFilter.class.getName() + ".ssoLoginLoggedOut";
 
     private static final String AUTHORIZATION_HEADER = "Authorization";
     private static final String BEARER_PREFIX = "Bearer ";
@@ -128,6 +137,18 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                         filterChain.doFilter(request, response);
                         return;
                     }
+                    // 이음에서 로그아웃한 SSO 로그인의 토큰은 받지 않는다(보안 점검 CLI-6). 인가코드 교환과 같은 대조다 —
+                    // 교환만 막으면, 로그아웃 뒤에도 살아 있는 SSO 로그인으로 받은 SSO 토큰을 그대로 들고 와 이음 API 를
+                    // 부를 수 있다. 무효 토큰과 같이 다룬다: 인증을 세우지 않고 넘긴다(보호된 경로는 401, 열린 경로는 진행).
+                    // sid 가 없는 옛 토큰은 대조할 값이 없어 통과하고, Redis 조회 실패도 통과다(ServiceLogoutStore — fail-open).
+                    // HR 토큰 쪽(위 분기)은 이미 들어와 있는 세션이라 이 목록을 보지 않는다 — 그쪽은 jti 차단이 맡는다.
+                    String ssoSid = jwtTokenProvider.getSidFromSsoToken(token);
+                    if (ssoSid != null && serviceLogoutStore.isLoggedOut(ssoSid)) {
+                        log.info("SSO JWT 거부: 이음에서 로그아웃한 SSO 로그인이다(비밀번호를 다시 받아야 한다)");
+                        request.setAttribute(SSO_LOGIN_LOGGED_OUT_ATTRIBUTE, Boolean.TRUE);
+                        filterChain.doFilter(request, response);
+                        return;
+                    }
                     authentication = createAuthenticationFromSsoToken(token);
                     if (rejectIfPasswordChangeRequired(authentication, request, response)) {
                         return;
@@ -173,7 +194,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         JwtClaimsPrincipal principal = new JwtClaimsPrincipal(
                 userId, ssoUserRowId, name, email, roles, permissions,
                 () -> findLinkedHrUser(userId, ssoUserRowId),  // Lazy Loading Supplier — 연결 번호까지 대조(IEU-6)
-                jwtTokenProvider.isPasswordChangeRequiredFromHrToken(token)
+                jwtTokenProvider.isPasswordChangeRequiredFromHrToken(token),
+                jwtTokenProvider.getSsoSidFromHrToken(token)
         );
 
         log.debug("HR JWT 인증 성공 (DB 조회 없음): userId={}, authorities={}", userId, authorities.size());
@@ -236,7 +258,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 // 컨트롤러가 쓰는 User 는 지금처럼 필요할 때 읽는다 — 필터에서 읽은 엔티티는 요청의
                 // 영속성 컨텍스트 밖이라 지연 로딩이 깨질 수 있어 넘기지 않는다
                 () -> findLinkedHrUser(userId, ssoUserRowId),
-                tokenPrincipal.isPasswordChangeRequired()
+                tokenPrincipal.isPasswordChangeRequired(),
+                tokenPrincipal.getSsoSid()
         );
         log.debug("상태 변경 요청 — DB 권한으로 인증: userId={}, authorities={}", userId, authorities.size());
         return new UsernamePasswordAuthenticationToken(principal, null, authorities);
@@ -335,9 +358,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             return;
         }
         List<String> roles = user.getRoles().stream().map(Role::getCode).collect(Collectors.toList());
+        // 표식 · 로그인 시각 · SSO 로그인 번호는 옛 토큰에서 옮겨 싣는다. SSO 로그인 번호(sso_sid)가 갱신에서 빠지면
+        // 한 시간 넘게 쓴 세션의 로그아웃이 "이음에서 로그아웃함" 으로 기록되지 않는다(보안 점검 CLI-6).
+        // 갱신은 이미 들어와 있는 세션을 잇는 것이라 여기서는 그 목록을 대조하지 않는다 — 대조는 새 로그인(토큰 교환) 몫이다.
         String renewed = jwtTokenProvider.createHrAccessToken(user.getId(), user.getSsoUserRowId(),
                 user.getName(), user.getEmail(), roles, user.getAllAuthorities(),
-                passwordChangeRequired, authTime);  // 표식 · 로그인 시각은 옛 토큰에서 옮겨 싣는다
+                passwordChangeRequired, authTime, jwtTokenProvider.getSsoSidFromHrToken(token));
         // TokenExchangeController.setAccessTokenCookie 와 같은 속성 — 로그인이 심는 쿠키를
         // 그대로 대체해야 두 쿠키가 병존하지 않는다.
         ResponseCookie cookie = ResponseCookie.from(ACCESS_TOKEN_COOKIE, renewed)
