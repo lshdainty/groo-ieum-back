@@ -24,7 +24,8 @@ import java.time.Duration;
 @RequiredArgsConstructor
 public class ServiceLogoutStore {
 
-    private static final String KEY_PREFIX = "ieum:logged-out-sid:";
+    // 서비스 접두사(ieum:)는 여기 쓰지 않는다 — 템플릿(RedisConfig)이 모든 키에 붙인다
+    private static final String KEY_PREFIX = "logged-out-sid:";
 
     /**
      * 기록을 남겨 두는 기간. SSO 로그인은 쓰는 동안 계속 연장돼, 로그아웃한 그 로그인이 언제 끝나는지 이쪽에서는

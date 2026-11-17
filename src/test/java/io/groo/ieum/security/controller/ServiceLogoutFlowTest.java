@@ -193,8 +193,8 @@ class ServiceLogoutFlowTest {
 
         // 2) 이음에서 로그아웃 — jti 차단 + 그 SSO 로그인을 90일 기억
         logout(hrToken);
-        assertThat(redisKeys).containsEntry("ieum:logged-out-sid:S1", Duration.ofDays(90));
-        assertThat(redisKeys).containsKey("ieum:revoked-jti:" + provider.getHrJti(hrToken));
+        assertThat(redisKeys).containsEntry("logged-out-sid:S1", Duration.ofDays(90));
+        assertThat(redisKeys).containsKey("revoked-jti:" + provider.getHrJti(hrToken));
 
         // 3) 로그인 단추만 다시 누름 — SSO 가 비밀번호 없이 같은 로그인(S1)의 토큰을 내준다 → 거절, 쿠키 없음
         MvcResult rejected = exchange("S1", "ko");
@@ -234,7 +234,7 @@ class ServiceLogoutFlowTest {
         assertThat(provider.getSsoSidFromHrToken(hrToken)).isNull();
 
         logout(hrToken);
-        assertThat(redisKeys.keySet()).noneMatch(key -> key.startsWith("ieum:logged-out-sid:"));
+        assertThat(redisKeys.keySet()).noneMatch(key -> key.startsWith("logged-out-sid:"));
 
         login(null);
     }

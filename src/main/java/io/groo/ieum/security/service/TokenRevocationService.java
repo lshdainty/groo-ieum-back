@@ -32,9 +32,10 @@ import java.util.Date;
 @RequiredArgsConstructor
 public class TokenRevocationService {
 
-    private static final String KEY_PREFIX = "ieum:revoked-jti:";
-    private static final String USER_KEY_PREFIX = "ieum:revoked-user:";
-    private static final String SSO_LOGIN_KEY_PREFIX = "ieum:revoked-sso-sid:";
+    // 서비스 접두사(ieum:)는 여기 쓰지 않는다 — 템플릿(RedisConfig)이 모든 키에 붙인다
+    private static final String KEY_PREFIX = "revoked-jti:";
+    private static final String USER_KEY_PREFIX = "revoked-user:";
+    private static final String SSO_LOGIN_KEY_PREFIX = "revoked-sso-sid:";
 
     /**
      * 끊긴 SSO 로그인 기록을 두는 기간. 그 로그인 번호를 실은 토큰이 전부 만료될 때까지만 있으면 된다 — HR 토큰과

@@ -31,7 +31,7 @@ class TokenRevocationServiceTest {
     void revokeSetsTtl() {
         when(redis.opsForValue()).thenReturn(ops);
         service.revoke("j1", 90_000L);
-        verify(ops).set("ieum:revoked-jti:j1", "1", Duration.ofMillis(90_000L));
+        verify(ops).set("revoked-jti:j1", "1", Duration.ofMillis(90_000L));
     }
 
     @Test
@@ -45,7 +45,7 @@ class TokenRevocationServiceTest {
     @Test
     @DisplayName("isRevoked - 차단된 jti 는 true")
     void revoked() {
-        when(redis.hasKey("ieum:revoked-jti:j1")).thenReturn(true);
+        when(redis.hasKey("revoked-jti:j1")).thenReturn(true);
         assertThat(service.isRevoked("j1")).isTrue();
     }
 
@@ -67,7 +67,7 @@ class TokenRevocationServiceTest {
         service.revokeAllForUser("u1");
 
         org.mockito.ArgumentCaptor<String> value = org.mockito.ArgumentCaptor.forClass(String.class);
-        verify(ops).set(eq("ieum:revoked-user:u1"), value.capture(), eq(Duration.ofMillis(3_600_000L)));
+        verify(ops).set(eq("revoked-user:u1"), value.capture(), eq(Duration.ofMillis(3_600_000L)));
         assertThat(Long.parseLong(value.getValue())).isBetween(before, System.currentTimeMillis());
     }
 
@@ -83,7 +83,7 @@ class TokenRevocationServiceTest {
             var syncs = org.springframework.transaction.support.TransactionSynchronizationManager.getSynchronizations();
             assertThat(syncs).hasSize(1);
             syncs.forEach(s -> s.afterCommit());
-            verify(ops).set(eq("ieum:revoked-user:u1"), anyString(), eq(Duration.ofMillis(3_600_000L)));
+            verify(ops).set(eq("revoked-user:u1"), anyString(), eq(Duration.ofMillis(3_600_000L)));
         } finally {
             org.springframework.transaction.support.TransactionSynchronizationManager.clearSynchronization();
         }
@@ -93,7 +93,7 @@ class TokenRevocationServiceTest {
     @DisplayName("isUserRevoked - 차단 시각 이전 · 같은 초에 발급된 토큰은 막고, 이후 발급분은 통과")
     void isUserRevokedComparesIat() {
         when(redis.opsForValue()).thenReturn(ops);
-        when(ops.get("ieum:revoked-user:u1")).thenReturn("1700000000500");
+        when(ops.get("revoked-user:u1")).thenReturn("1700000000500");
 
         assertThat(service.isUserRevoked("u1", new java.util.Date(1699999999000L))).isTrue();
         assertThat(service.isUserRevoked("u1", new java.util.Date(1700000000000L))).isTrue();
@@ -105,10 +105,10 @@ class TokenRevocationServiceTest {
     @DisplayName("isUserRevoked - 차단 기록이 없으면 통과, Redis 장애는 fail-open")
     void isUserRevokedNoRecordOrFailure() {
         when(redis.opsForValue()).thenReturn(ops);
-        when(ops.get("ieum:revoked-user:u2")).thenReturn(null);
+        when(ops.get("revoked-user:u2")).thenReturn(null);
         assertThat(service.isUserRevoked("u2", new java.util.Date())).isFalse();
 
-        when(ops.get("ieum:revoked-user:u3")).thenThrow(new RuntimeException("redis down"));
+        when(ops.get("revoked-user:u3")).thenThrow(new RuntimeException("redis down"));
         assertThat(service.isUserRevoked("u3", new java.util.Date())).isFalse();
     }
 
@@ -119,7 +119,7 @@ class TokenRevocationServiceTest {
 
         service.revokeSsoLogin("sid-1");
 
-        verify(ops).set("ieum:revoked-sso-sid:sid-1", "1", TokenRevocationService.SSO_LOGIN_RETENTION);
+        verify(ops).set("revoked-sso-sid:sid-1", "1", TokenRevocationService.SSO_LOGIN_RETENTION);
         assertThat(TokenRevocationService.SSO_LOGIN_RETENTION)
                 .as("그 로그인의 HR 토큰 · SSO 토큰(각 1시간 안팎)이 전부 만료될 때까지는 남아 있어야 한다")
                 .isGreaterThanOrEqualTo(java.time.Duration.ofMillis(jwtProperties.getHrAccessExpiration()));
@@ -139,8 +139,8 @@ class TokenRevocationServiceTest {
     @Test
     @DisplayName("CLI-6 isSsoLoginRevoked - 적힌 번호는 true, 없는 번호 · 번호 없는 토큰은 false, Redis 장애는 fail-open")
     void isSsoLoginRevoked() {
-        when(redis.hasKey("ieum:revoked-sso-sid:sid-1")).thenReturn(true);
-        when(redis.hasKey("ieum:revoked-sso-sid:sid-2")).thenReturn(false);
+        when(redis.hasKey("revoked-sso-sid:sid-1")).thenReturn(true);
+        when(redis.hasKey("revoked-sso-sid:sid-2")).thenReturn(false);
 
         assertThat(service.isSsoLoginRevoked("sid-1")).isTrue();
         assertThat(service.isSsoLoginRevoked("sid-2")).isFalse();
