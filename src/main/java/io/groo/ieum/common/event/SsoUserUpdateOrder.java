@@ -30,7 +30,8 @@ import java.time.ZoneOffset;
 public class SsoUserUpdateOrder {
 
     static final Duration RETENTION = Duration.ofDays(30);
-    private static final String KEY_PREFIX = "ieum:sso-user-updated:";
+    // 서비스 접두사(ieum:)는 여기 쓰지 않는다 — 템플릿(RedisConfig)이 모든 키에 붙인다
+    private static final String KEY_PREFIX = "sso-user-updated:";
 
     private final StringRedisTemplate redisTemplate;
 

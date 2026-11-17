@@ -126,7 +126,7 @@ class SsoTokenServiceLogoutTest {
     }
 
     private void loggedOut(String sid) {
-        redisKeys.add("ieum:logged-out-sid:" + sid);
+        redisKeys.add("logged-out-sid:" + sid);
     }
 
     /** Authorization: Bearer 로 보낸 요청 — 필터가 인증을 세웠는지와 체인을 이어 갔는지를 본다 */
@@ -210,7 +210,7 @@ class SsoTokenServiceLogoutTest {
 
         assertThat(authenticated()).isTrue();
         assertThat(loggedOutMarker(request)).isNull();
-        verify(redis).hasKey("ieum:logged-out-sid:S1");
+        verify(redis).hasKey("logged-out-sid:S1");
     }
 
     @Test

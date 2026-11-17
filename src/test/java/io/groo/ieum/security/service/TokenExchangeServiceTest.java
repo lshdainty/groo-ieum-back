@@ -308,6 +308,6 @@ class TokenExchangeServiceTest {
                 .willReturn("hrToken");
 
         assertThat(withRealStore.exchange("ssoToken").getAccessToken()).isEqualTo("hrToken");
-        verify(redis).hasKey("ieum:logged-out-sid:sid-1");
+        verify(redis).hasKey("logged-out-sid:sid-1");
     }
 }

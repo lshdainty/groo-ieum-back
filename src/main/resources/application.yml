@@ -36,6 +36,9 @@ spring:
     redis:
       host: ${REDIS_HOST}
       port: ${REDIS_PORT}
+      # 서비스 전용 Redis 계정(보안 점검 INF-2 · SSO-13). 이음 계정은 ieum:* 키와 SSO 이벤트 구독만 할 수 있다.
+      # 값을 주지 않으면 Redis 기본 계정(default)으로 붙는다 — 계정을 나누지 않은 Redis(로컬 · 테스트)를 위한 기본값이다.
+      username: ${REDIS_USERNAME:default}
       password: ${REDIS_PASSWORD}
       database: ${REDIS_DATABASE}
 

@@ -33,7 +33,7 @@ class ServiceLogoutStoreTest {
 
         store.remember("sid-1");
 
-        verify(ops).set("ieum:logged-out-sid:sid-1", "1", Duration.ofDays(90));
+        verify(ops).set("logged-out-sid:sid-1", "1", Duration.ofDays(90));
     }
 
     @Test
@@ -58,8 +58,8 @@ class ServiceLogoutStoreTest {
     @Test
     @DisplayName("isLoggedOut - 적힌 sid 는 true, 적히지 않은 sid 는 false")
     void loggedOutOnlyWhenRemembered() {
-        when(redis.hasKey("ieum:logged-out-sid:sid-out")).thenReturn(true);
-        when(redis.hasKey("ieum:logged-out-sid:sid-new")).thenReturn(false);
+        when(redis.hasKey("logged-out-sid:sid-out")).thenReturn(true);
+        when(redis.hasKey("logged-out-sid:sid-new")).thenReturn(false);
 
         assertThat(store.isLoggedOut("sid-out")).isTrue();
         assertThat(store.isLoggedOut("sid-new")).isFalse();
