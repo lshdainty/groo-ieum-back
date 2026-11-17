@@ -30,6 +30,8 @@ import tools.jackson.databind.json.JsonMapper;
 public class SsoSessionEventSubscriber {
 
     static final String SESSION_REVOKED_ALL = "SESSION_REVOKED_ALL";
+    /** 로그인 한 건(SSO access 토큰의 sid)이 끊겼다 — 그루 계정 로그아웃 · 기기 끊기 · 관리자 세션 종료(보안 점검 CLI-6) */
+    static final String SESSION_REVOKED = "SESSION_REVOKED";
 
     private final UserRepository userRepository;
     private final TokenRevocationService tokenRevocationService;
@@ -55,17 +57,34 @@ public class SsoSessionEventSubscriber {
             return;
         }
 
-        if (!SESSION_REVOKED_ALL.equals(event.type())) {
-            // 발행 쪽이 새 종류를 냈는데 이쪽이 아직 모른다 — 정상적인 시차다
-            log.debug("모르는 세션 이벤트 종류 — 무시한다: type={}", event.type());
-            return;
-        }
-
         try {
-            handleRevokedAll(event);
+            if (SESSION_REVOKED_ALL.equals(event.type())) {
+                handleRevokedAll(event);
+            } else if (SESSION_REVOKED.equals(event.type())) {
+                handleRevoked(event);
+            } else {
+                // 발행 쪽이 새 종류를 냈는데 이쪽이 아직 모른다 — 정상적인 시차다
+                log.debug("모르는 세션 이벤트 종류 — 무시한다: type={}", event.type());
+            }
         } catch (Exception e) {
             log.error("세션 이벤트 처리 실패: ssoUserRowId={}, error={}", event.ssoUserRowId(), e.getMessage());
         }
+    }
+
+    /**
+     * 로그인 한 건이 SSO 에서 끊겼다 — 그 로그인에서 나온 이음 토큰만 끊는다. 같은 사람의 다른 기기 · 다른 로그인은 둔다.
+     *
+     * <p>HR 토큰은 쓰는 동안 스스로 연장돼, 이 알림이 없으면 그루 계정에서 로그아웃한 뒤에도 이음이 계속 열려 있었다.
+     * 사용자를 찾지 않는다 — 대조하는 값은 토큰에 실린 SSO 로그인 번호({@code sso_sid}) 하나다.
+     */
+    private void handleRevoked(SessionEvent event) {
+        if (event.sessionId() == null || event.sessionId().isBlank()) {
+            log.warn("로그인 폐기 이벤트에 로그인 번호가 없다 — 무시한다. reason={}", event.reason());
+            return;
+        }
+        tokenRevocationService.revokeSsoLogin(event.sessionId());
+        log.info("SSO 로그인 폐기 전파 — 그 로그인의 이음 토큰을 끊었다. ssoUserRowId={}, reason={}",
+                event.ssoUserRowId(), event.reason());
     }
 
     private void handleRevokedAll(SessionEvent event) {

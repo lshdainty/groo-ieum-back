@@ -109,6 +109,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                         filterChain.doFilter(request, response);
                         return;
                     }
+                    // SSO 가 끊은 로그인(그루 계정 로그아웃 · 기기 끊기 · 관리자 세션 종료)에서 나온 토큰은 거절한다
+                    // (보안 점검 CLI-6). HR 토큰은 아래 슬라이딩 갱신으로 쓰는 동안 계속 이어져, 이 대조가 없으면
+                    // 그루 계정에서 로그아웃한 뒤에도 이음이 열려 있었다. sso_sid 가 없는 옛 토큰은 통과한다.
+                    if (tokenRevocationService.isSsoLoginRevoked(jwtTokenProvider.getSsoSidFromHrToken(token))) {
+                        filterChain.doFilter(request, response);
+                        return;
+                    }
                     // HR JWT인 경우: Claims에서 직접 정보 추출 (DB 조회 없음)
                     authentication = createAuthenticationFromHrToken(token);
                     // 상태를 바꾸는 요청은 권한을 DB 에서 다시 읽는다 — 삭제(퇴사)된 사용자면 인증하지 않는다
@@ -143,6 +150,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     // sid 가 없는 옛 토큰은 대조할 값이 없어 통과하고, Redis 조회 실패도 통과다(ServiceLogoutStore — fail-open).
                     // HR 토큰 쪽(위 분기)은 이미 들어와 있는 세션이라 이 목록을 보지 않는다 — 그쪽은 jti 차단이 맡는다.
                     String ssoSid = jwtTokenProvider.getSidFromSsoToken(token);
+                    // SSO 가 끊은 로그인의 SSO 토큰도 받지 않는다(CLI-6) — SSO 는 자기 차단 목록으로 거르지만
+                    // 이음은 이 토큰을 서명으로만 확인하므로, 알림으로 받은 목록을 따로 본다. 비밀번호를 다시 받으라는
+                    // 표식은 세우지 않는다(그 로그인은 끝났다 — 평범한 401).
+                    if (tokenRevocationService.isSsoLoginRevoked(ssoSid)) {
+                        log.info("SSO JWT 거부: SSO 에서 끊긴 로그인이다");
+                        filterChain.doFilter(request, response);
+                        return;
+                    }
                     if (ssoSid != null && serviceLogoutStore.isLoggedOut(ssoSid)) {
                         log.info("SSO JWT 거부: 이음에서 로그아웃한 SSO 로그인이다(비밀번호를 다시 받아야 한다)");
                         request.setAttribute(SSO_LOGIN_LOGGED_OUT_ATTRIBUTE, Boolean.TRUE);
