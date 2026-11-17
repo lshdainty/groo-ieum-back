@@ -6,6 +6,7 @@ import io.groo.ieum.permission.domain.Role;
 import io.groo.ieum.security.jwt.JwtTokenProvider;
 import io.groo.ieum.security.filter.JwtAuthenticationFilter;
 import io.groo.ieum.security.resolver.LoginUserArgumentResolver;
+import io.groo.ieum.security.service.ServiceLogoutStore;
 import io.groo.ieum.security.service.TokenRevocationService;
 import io.groo.ieum.user.controller.UserApiController;
 import io.groo.ieum.user.domain.User;
@@ -106,7 +107,8 @@ class UserApiSecurityWiringTest {
         @Bean
         JwtAuthenticationFilter jwtAuthenticationFilter(JwtTokenProvider provider, UserService userService,
                                                         JwtProperties props, TokenRevocationService revocation) {
-            return new JwtAuthenticationFilter(provider, userService, props, revocation, JsonMapper.builder().build());
+            return new JwtAuthenticationFilter(provider, userService, props, revocation,
+                    mock(ServiceLogoutStore.class), JsonMapper.builder().build());
         }
 
         @Bean

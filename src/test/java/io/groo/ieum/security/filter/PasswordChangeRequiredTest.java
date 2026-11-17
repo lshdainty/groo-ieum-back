@@ -6,6 +6,7 @@ import io.groo.ieum.security.jwt.JwtTokenProvider;
 import io.groo.core.security.jwt.SsoJwksKeyLocator;
 import io.groo.ieum.security.principal.JwtClaimsPrincipal;
 import io.groo.ieum.security.principal.UserPrincipal;
+import io.groo.ieum.security.service.ServiceLogoutStore;
 import io.groo.ieum.security.service.TokenExchangeService;
 import io.groo.ieum.security.service.TokenRevocationService;
 import io.groo.ieum.user.controller.UserApiController;
@@ -65,7 +66,7 @@ class PasswordChangeRequiredTest {
         when(user.isLinkedToSsoUser(org.mockito.ArgumentMatchers.any())).thenCallRealMethod();
         when(userService.findUserById("user1")).thenReturn(user);
         filter = new JwtAuthenticationFilter(provider, userService, props,
-                mock(TokenRevocationService.class), JsonMapper.builder().build());
+                mock(TokenRevocationService.class), mock(ServiceLogoutStore.class), JsonMapper.builder().build());
     }
 
     @AfterEach
@@ -156,6 +157,7 @@ class PasswordChangeRequiredTest {
         doReturn(true).when(provider).isSsoAccessTokenForHr("sso");
         doReturn("user1").when(provider).getUserId("sso");
         doReturn(7L).when(provider).getUserNoFromSsoToken("sso");
+        doReturn(null).when(provider).getSidFromSsoToken("sso");
 
         doReturn(true).when(provider).isPasswordChangeRequiredFromSsoToken("sso");
         MockHttpServletRequest req = new MockHttpServletRequest("GET", "/api/v1/users");
@@ -225,13 +227,13 @@ class PasswordChangeRequiredTest {
     void exchangeCarriesMarker() {
         JwtTokenProvider p = mock(JwtTokenProvider.class);
         io.groo.ieum.client.sso.SsoApiClient sso = mock(io.groo.ieum.client.sso.SsoApiClient.class);
-        TokenExchangeService svc = new TokenExchangeService(p, userService, sso);
+        TokenExchangeService svc = new TokenExchangeService(p, userService, sso, mock(ServiceLogoutStore.class));
         when(p.validateSsoToken("s")).thenReturn(true);
         when(p.getServicesFromSsoToken("s")).thenReturn(List.of("hr"));
         when(p.getUserIdFromSsoToken("s")).thenReturn("user1");
         when(p.getUserNoFromSsoToken("s")).thenReturn(7L);
         when(p.isPasswordChangeRequiredFromSsoToken("s")).thenReturn(true);
-        when(p.createHrAccessToken(any(User.class), any(), any(), org.mockito.ArgumentMatchers.eq(true))).thenReturn("hr-y");
+        when(p.createHrAccessToken(any(User.class), any(), any(), org.mockito.ArgumentMatchers.eq(true), any())).thenReturn("hr-y");
 
         assertThat(svc.exchange("s").getAccessToken()).isEqualTo("hr-y");
     }

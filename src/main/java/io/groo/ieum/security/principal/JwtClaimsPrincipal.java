@@ -23,6 +23,7 @@ public class JwtClaimsPrincipal implements UserPrincipal {
     private final List<String> permissions;
     private final Supplier<User> userSupplier;
     private final boolean passwordChangeRequired;
+    private final String ssoSid;
 
     // Lazy loaded User
     private User user;
@@ -51,7 +52,17 @@ public class JwtClaimsPrincipal implements UserPrincipal {
     public JwtClaimsPrincipal(String userId, Long ssoUserRowId, String name, String email,
                                List<String> roles, List<String> permissions,
                                Supplier<User> userSupplier, boolean passwordChangeRequired) {
+        this(userId, ssoUserRowId, name, email, roles, permissions, userSupplier, passwordChangeRequired, null);
+    }
+
+    /**
+     * @param ssoSid HR 토큰의 sso_sid 클레임 값(SSO 로그인 번호). 없으면 null
+     */
+    public JwtClaimsPrincipal(String userId, Long ssoUserRowId, String name, String email,
+                               List<String> roles, List<String> permissions,
+                               Supplier<User> userSupplier, boolean passwordChangeRequired, String ssoSid) {
         this.passwordChangeRequired = passwordChangeRequired;
+        this.ssoSid = ssoSid;
         this.userId = userId;
         this.ssoUserRowId = ssoUserRowId;
         this.name = name;

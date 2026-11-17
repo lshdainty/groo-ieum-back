@@ -520,7 +520,10 @@ public class UserApiController implements UserApi {
             return;
         }
         List<String> roles = loginUser.getRoles().stream().map(Role::getCode).collect(Collectors.toList());
-        String token = jwtTokenProvider.createHrAccessToken(loginUser, roles, loginUser.getAllAuthorities(), false);
+        // 같은 로그인을 잇는 재발급이라 SSO 로그인 번호(sso_sid)는 옮겨 싣는다 — 빠지면 이 뒤의 로그아웃이
+        // "이음에서 로그아웃함" 으로 기록되지 않는다(보안 점검 CLI-6)
+        String token = jwtTokenProvider.createHrAccessToken(loginUser, roles, loginUser.getAllAuthorities(), false,
+                principal.getSsoSid());
         // JwtAuthenticationFilter · TokenExchangeController 가 심는 쿠키와 같은 속성 — 병존하지 않게 대체한다
         ResponseCookie cookie = ResponseCookie.from("hr_access_token", token)
                 .httpOnly(true)

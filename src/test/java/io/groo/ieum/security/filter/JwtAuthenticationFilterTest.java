@@ -2,6 +2,7 @@ package io.groo.ieum.security.filter;
 
 import io.groo.ieum.common.config.properties.JwtProperties;
 import io.groo.ieum.security.jwt.JwtTokenProvider;
+import io.groo.ieum.security.service.ServiceLogoutStore;
 import io.groo.ieum.user.domain.User;
 import io.groo.ieum.user.service.UserService;
 import io.groo.core.exception.EntityNotFoundException;
@@ -25,10 +26,14 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 
 /**
  * 슬라이딩 세션 갱신 — 액세스 토큰(1시간)이 "쓰고 있는 중"에 정각으로 끊기지 않도록,
@@ -47,6 +52,8 @@ class JwtAuthenticationFilterTest {
     private JwtProperties jwtProperties;
     @Mock
     private io.groo.ieum.security.service.TokenRevocationService tokenRevocationService;
+    @Mock
+    private ServiceLogoutStore serviceLogoutStore;
 
     @org.mockito.Spy
     private tools.jackson.databind.ObjectMapper objectMapper = tools.jackson.databind.json.JsonMapper.builder().build();
@@ -72,7 +79,7 @@ class JwtAuthenticationFilterTest {
         // 갱신 분기에서만 쓰이는 스텁 — 비갱신 테스트에서는 호출되지 않는다.
         lenient().when(jwtProperties.getHrAccessExpiration()).thenReturn(3_600_000L);
         lenient().when(jwtTokenProvider.createHrAccessToken(any(), any(), any(), any(), anyList(), anyList(),
-                org.mockito.ArgumentMatchers.anyBoolean(), any())).thenReturn(RENEWED);
+                org.mockito.ArgumentMatchers.anyBoolean(), any(), any())).thenReturn(RENEWED);
         // 절대 수명(M-1) — 기본은 방금 로그인한 토큰
         lenient().when(jwtProperties.getHrAbsoluteLifetime()).thenReturn(2_592_000_000L);
         lenient().when(jwtTokenProvider.getHrAuthTime(TOKEN)).thenReturn(LOGGED_IN_AT);
@@ -112,6 +119,23 @@ class JwtAuthenticationFilterTest {
             assertThat(setCookie).contains("HttpOnly");
             assertThat(SecurityContextHolder.getContext().getAuthentication()).isNotNull();
         }
+
+        @Test
+        @DisplayName("보안 점검 CLI-6 - 갱신하면 SSO 로그인 번호(sso_sid)도 그대로 옮겨 싣는다")
+        void renewalCarriesSsoSid() throws Exception {
+            given(jwtTokenProvider.getRemainingExpiration(TOKEN)).willReturn(300_000L);
+            given(jwtTokenProvider.getSsoSidFromHrToken(TOKEN)).willReturn("sid-1");
+            User user = mock(User.class);
+            linkTo(user, 7L);
+            given(user.getRoles()).willReturn(new java.util.ArrayList<>());
+            given(user.getAllAuthorities()).willReturn(List.of());
+            given(userService.findUserById("user1")).willReturn(user);
+
+            runFilter();
+
+            verify(jwtTokenProvider).createHrAccessToken(any(), any(), any(), any(), anyList(),
+                    anyList(), anyBoolean(), any(), eq("sid-1"));
+        }
     }
 
     @Nested
@@ -131,7 +155,8 @@ class JwtAuthenticationFilterTest {
             runFilter();
 
             org.mockito.Mockito.verify(jwtTokenProvider).createHrAccessToken(any(), any(), any(), any(), anyList(),
-                    anyList(), org.mockito.ArgumentMatchers.anyBoolean(), org.mockito.ArgumentMatchers.eq(LOGGED_IN_AT));
+                    anyList(), org.mockito.ArgumentMatchers.anyBoolean(), org.mockito.ArgumentMatchers.eq(LOGGED_IN_AT),
+                    any());
         }
 
         @Test
@@ -146,7 +171,7 @@ class JwtAuthenticationFilterTest {
             assertThat(response.getHeader("Set-Cookie")).isNull();
             assertThat(SecurityContextHolder.getContext().getAuthentication()).isNotNull();
             org.mockito.Mockito.verify(jwtTokenProvider, org.mockito.Mockito.never()).createHrAccessToken(any(), any(),
-                    any(), any(), anyList(), anyList(), org.mockito.ArgumentMatchers.anyBoolean(), any());
+                    any(), any(), anyList(), anyList(), org.mockito.ArgumentMatchers.anyBoolean(), any(), any());
         }
     }
 
@@ -167,7 +192,7 @@ class JwtAuthenticationFilterTest {
             assertThat(response.getHeader("Set-Cookie")).isNull();
             org.mockito.Mockito.verify(jwtTokenProvider, org.mockito.Mockito.never())
                     .createHrAccessToken(any(), any(), any(), any(), anyList(), anyList(),
-                            org.mockito.ArgumentMatchers.anyBoolean(), any());
+                            org.mockito.ArgumentMatchers.anyBoolean(), any(), any());
         }
     }
 

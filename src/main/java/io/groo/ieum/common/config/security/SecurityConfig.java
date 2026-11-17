@@ -9,6 +9,7 @@ import io.groo.core.security.web.PrometheusAccessFilter;
 import io.groo.core.security.web.SecurityErrorResponder;
 import io.groo.ieum.common.config.properties.AppProperties;
 import io.groo.ieum.security.filter.JwtAuthenticationFilter;
+import io.groo.ieum.security.filter.ServiceLogoutEntryPoint;
 import io.groo.ieum.security.service.IpBlacklistService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
@@ -83,9 +84,10 @@ public class SecurityConfig {
                 .anyRequest().authenticated()
         );
 
-        // 인증 실패 처리
+        // 인증 실패 처리 — 이음에서 로그아웃한 SSO 로그인의 토큰이라 거절한 요청만 코드 AUTH_010 으로 나가고(보안 점검 CLI-6),
+        // 나머지는 기존 응답 그대로다
         http.exceptionHandling(exception -> exception
-                .authenticationEntryPoint(authenticationEntryPoint)
+                .authenticationEntryPoint(new ServiceLogoutEntryPoint(securityErrorResponder, authenticationEntryPoint))
                 .accessDeniedHandler(accessDeniedHandler)
         );
 

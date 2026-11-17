@@ -32,6 +32,7 @@ public class TokenExchangeService {
     private final JwtTokenProvider jwtTokenProvider;
     private final UserService userService;
     private final SsoApiClient ssoApiClient;
+    private final ServiceLogoutStore serviceLogoutStore;
 
     private static final String HR_SERVICE_CODE = "hr";
 
@@ -140,6 +141,18 @@ public class TokenExchangeService {
         // 4. 사용자 정보 추출
         String userId = jwtTokenProvider.getUserIdFromSsoToken(ssoToken);
 
+        // 4-1. 이음에서 로그아웃한 SSO 로그인이면 HR 토큰을 내주지 않는다(보안 점검 CLI-6).
+        //      이음 로그아웃은 그루 계정(SSO) 로그인을 끊지 않는다 — 그래서 로그아웃 뒤 로그인 단추 한 번에 SSO 가
+        //      비밀번호 없이 같은 로그인(sid)의 토큰을 다시 내준다. 그 sid 는 로그아웃 때 적어 뒀다. 프런트가 이 코드를
+        //      보고 SSO 에 비밀번호를 다시 받게 하면(prompt=login) 새 sid 가 나와 통과한다.
+        //      sid 가 없는 옛 SSO 토큰은 대조할 값이 없어 검사 · 기록 모두 건너뛴다.
+        String ssoSid = jwtTokenProvider.getSidFromSsoToken(ssoToken);
+        if (ssoSid != null && serviceLogoutStore.isLoggedOut(ssoSid)) {
+            // 로그아웃 뒤 다시 들어올 때마다 한 번씩 지나는 정상 흐름이라 info 다(전역 예외 처리기가 코드와 함께 warn 을 남긴다)
+            log.info("토큰 교환 거부 - 이음에서 로그아웃한 SSO 로그인이다(비밀번호를 다시 받아야 한다): userId={}", userId);
+            throw new UnauthorizedException(HrErrorCode.SSO_LOGIN_LOGGED_OUT);
+        }
+
         // 5. HR DB에서 사용자 조회
         Long ssoUserNo = jwtTokenProvider.getUserNoFromSsoToken(ssoToken);
         User user = findLinkedUser(ssoToken, userId, ssoUserNo);
@@ -152,8 +165,9 @@ public class TokenExchangeService {
 
         // 7. HR JWT 발급
         //    SSO 가 임시 비밀번호 상태로 표시한 사용자는 pwdChange=Y 를 HR 토큰에 옮겨 싣는다
+        //    SSO 로그인 번호(sid)도 sso_sid 로 옮겨 싣는다 — 로그아웃 때 이 값을 "이음에서 로그아웃함" 으로 적는다
         boolean passwordChangeRequired = jwtTokenProvider.isPasswordChangeRequiredFromSsoToken(ssoToken);
-        String hrToken = jwtTokenProvider.createHrAccessToken(user, roles, permissions, passwordChangeRequired);
+        String hrToken = jwtTokenProvider.createHrAccessToken(user, roles, permissions, passwordChangeRequired, ssoSid);
         long expiresIn = jwtTokenProvider.getHrAccessExpirationSeconds();
 
         // 8. 응답 생성
