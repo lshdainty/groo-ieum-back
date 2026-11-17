@@ -500,13 +500,9 @@ public class VacationServiceImpl implements VacationService {
 
         // 2. 해당 부여 휴가에 연결된 사용 내역 조회 (VacationUsageDeduction 통해)
         List<VacationUsageDeduction> deductions = vacationUsageDeductionRepository.findByGrantIds(grantIds);
-        List<VacationUsage> allUsages = deductions.stream()
-                .map(VacationUsageDeduction::getUsage)
-                .distinct()
-                .toList();
 
         // 3. 현재 통계 계산
-        VacationServiceDto curStats = calculateStatsForBaseTime(validGrants, allUsages, baseTime);
+        VacationServiceDto curStats = calculateStatsForBaseTime(validGrants, deductions, baseTime);
 
         // 4. 이전 달 통계 계산 (이전 달의 마지막 날 23:59:59를 기준으로 계산)
         LocalDateTime prevMonthLastDay = baseTime.minusMonths(1)
@@ -521,12 +517,8 @@ public class VacationServiceImpl implements VacationService {
 
         // 이전 달 부여 휴가에 연결된 사용 내역 조회
         List<VacationUsageDeduction> prevDeductions = vacationUsageDeductionRepository.findByGrantIds(prevGrantIds);
-        List<VacationUsage> prevAllUsages = prevDeductions.stream()
-                .map(VacationUsageDeduction::getUsage)
-                .distinct()
-                .toList();
 
-        VacationServiceDto prevStats = calculateStatsForBaseTime(prevValidGrants, prevAllUsages, prevMonthLastDay);
+        VacationServiceDto prevStats = calculateStatsForBaseTime(prevValidGrants, prevDeductions, prevMonthLastDay);
 
         // 5. 잔여 휴가 Gap 계산 (이번달 잔여 - 이전달 잔여)
         BigDecimal remainTimeGap = curStats.getRemainTime().subtract(prevStats.getRemainTime());
@@ -558,28 +550,41 @@ public class VacationServiceImpl implements VacationService {
                 .build();
     }
 
-    private VacationServiceDto calculateStatsForBaseTime(List<VacationGrant> validGrants, List<VacationUsage> allUsages, LocalDateTime baseTime) {
+    /**
+     * baseTime 기준 통계 — 부여 · 쓴 시간 · 사용 예정 · 남은 시간.
+     *
+     * 쓴 시간 · 예정 시간은 <b>이 부여분들에서 실제로 차감된 양</b>(VacationUsageDeduction.deductedTime)으로 센다.
+     * 한 신청이 여러 부여분에서 나눠 차감되면 신청 전체 시간(VacationUsage.usedTime)은 이 부여분들 몫보다 크다.
+     * 남은 시간은 예정 휴가까지 뺀 값이다(부여 − 쓴 − 예정) — 신청하면 바로 빠지는 부여분 잔여(remainTime)의 합과 같아,
+     * 휴가 현황의 위 요약과 유형별 도넛("쓸 수 있는 휴가")이 같은 "남은 휴가" 를 보인다(사용자 결정 2026-11-17).
+     */
+    private VacationServiceDto calculateStatsForBaseTime(List<VacationGrant> validGrants, List<VacationUsageDeduction> deductions, LocalDateTime baseTime) {
         // 총 부여 시간 계산
         BigDecimal totalGranted = validGrants.stream()
                 .map(VacationGrant::getGrantTime)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        // baseTime 이전에 사용한 VacationUsage 필터링 및 합산
-        List<VacationUsage> usedUsages = allUsages.stream()
-                .filter(usage -> !usage.getStartDate().isAfter(baseTime))
+        // baseTime 이전에 시작한 사용 — 이 부여분들에서 차감된 양
+        List<VacationUsageDeduction> usedDeductions = deductions.stream()
+                .filter(d -> !d.getUsage().getStartDate().isAfter(baseTime))
                 .toList();
-        BigDecimal totalUsedTime = usedUsages.stream()
-                .map(VacationUsage::getUsedTime)
+        BigDecimal totalUsedTime = usedDeductions.stream()
+                .map(VacationUsageDeduction::getDeductedTime)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        // baseTime 이후 사용 예정인 VacationUsage 필터링 및 합산
-        BigDecimal totalExpectUsedTime = allUsages.stream()
-                .filter(usage -> usage.getStartDate().isAfter(baseTime))
-                .map(VacationUsage::getUsedTime)
+        // baseTime 이후 사용 예정 — 이 부여분들에서 차감된 양
+        BigDecimal totalExpectUsedTime = deductions.stream()
+                .filter(d -> d.getUsage().getStartDate().isAfter(baseTime))
+                .map(VacationUsageDeduction::getDeductedTime)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        // 잔여 시간 계산
-        BigDecimal totalRemainTime = totalGranted.subtract(totalUsedTime);
+        // 남은 시간 — 예정 휴가까지 뺀다
+        BigDecimal totalRemainTime = totalGranted.subtract(totalUsedTime).subtract(totalExpectUsedTime);
+
+        List<VacationUsage> usedUsages = usedDeductions.stream()
+                .map(VacationUsageDeduction::getUsage)
+                .distinct()
+                .toList();
 
         return VacationServiceDto.builder()
                 .remainTime(totalRemainTime)

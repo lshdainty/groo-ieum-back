@@ -995,6 +995,50 @@ class VacationServiceTest {
     }
 
     @Nested
+    @DisplayName("유저 휴가 통계 — 남은 휴가는 예정까지 뺀 값")
+    class GetUserVacationStatsRemain {
+        private VacationUsage usageAt(User user, LocalDateTime start, String usedTime) {
+            VacationUsage usage = createTestUsage(user);
+            ReflectionTestUtils.setField(usage, "startDate", start);
+            ReflectionTestUtils.setField(usage, "usedTime", new BigDecimal(usedTime));
+            return usage;
+        }
+
+        @Test
+        @DisplayName("부여 − 쓴 − 예정이고, 쓴 · 예정은 이 부여분에서 차감된 양으로 센다(신청 전체 시간이 아니다)")
+        void remainSubtractsPlannedAndCountsDeductedOnly() {
+            String userId = "user1";
+            User user = createTestUser(userId);
+            LocalDateTime baseTime = LocalDateTime.of(2025, 6, 15, 12, 0);
+            VacationGrant grant = createTestGrant(user, VacationType.ANNUAL, new BigDecimal("15.0000"));
+            ReflectionTestUtils.setField(grant, "rowId", 1L);
+
+            // 지난 사용 4일 — 모두 이 부여분에서
+            VacationUsage past = usageAt(user, LocalDateTime.of(2025, 5, 1, 9, 0), "4.0000");
+            // 지난 사용 3일 — 이 부여분에서는 2일만(나머지 1일은 다른 부여분)
+            VacationUsage split = usageAt(user, LocalDateTime.of(2025, 6, 2, 9, 0), "3.0000");
+            // 사용 예정 1.5일
+            VacationUsage planned = usageAt(user, LocalDateTime.of(2025, 7, 1, 9, 0), "1.5000");
+            List<VacationUsageDeduction> deductions = List.of(
+                    VacationUsageDeduction.createVacationUsageDeduction(past, grant, new BigDecimal("4.0000")),
+                    VacationUsageDeduction.createVacationUsageDeduction(split, grant, new BigDecimal("2.0000")),
+                    VacationUsageDeduction.createVacationUsageDeduction(planned, grant, new BigDecimal("1.5000")));
+
+            given(userService.checkUserExist(userId)).willReturn(user);
+            given(vacationGrantRepository.findValidGrantsByUserIdAndBaseTime(eq(userId), any()))
+                    .willReturn(List.of(grant));
+            given(vacationUsageDeductionRepository.findByGrantIds(any())).willReturn(deductions);
+
+            VacationServiceDto result = vacationService.getUserVacationStats(userId, baseTime);
+
+            assertThat(result.getUsedTime()).isEqualByComparingTo("6.0000");
+            assertThat(result.getExpectUsedTime()).isEqualByComparingTo("1.5000");
+            // 15 − 6 − 1.5 — 쓸 수 있는 휴가(부여분 잔여 합)와 같은 값
+            assertThat(result.getRemainTime()).isEqualByComparingTo("7.5000");
+        }
+    }
+
+    @Nested
     @DisplayName("유저별 신청 휴가 통계 조회")
     class GetRequestedVacationStatsByUserId {
         @Test
