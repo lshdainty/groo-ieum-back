@@ -55,6 +55,8 @@ class SsoTokenServiceLogoutTest {
     private JwtAuthenticationFilter filter;
     private User user;
 
+    private TokenRevocationService tokenRevocationService;
+
     private final Set<String> redisKeys = new HashSet<>();
     private boolean redisDown;
 
@@ -94,8 +96,9 @@ class SsoTokenServiceLogoutTest {
         userService = mock(UserService.class);
         when(userService.findUserById("user1")).thenReturn(user);
 
+        tokenRevocationService = mock(TokenRevocationService.class);
         filter = new JwtAuthenticationFilter(provider, userService, props,
-                mock(TokenRevocationService.class), new ServiceLogoutStore(redis), JsonMapper.builder().build());
+                tokenRevocationService, new ServiceLogoutStore(redis), JsonMapper.builder().build());
     }
 
     @AfterEach
@@ -225,6 +228,36 @@ class SsoTokenServiceLogoutTest {
         }
         verify(redis, never()).hasKey(anyString());
         verify(userService, never()).findUserById(any());
+    }
+
+    @Test
+    @DisplayName("SSO 가 끊은 로그인(그루 계정 로그아웃 · 기기 끊기)의 SSO 토큰 - 인증을 세우지 않는다. 비밀번호를 다시 받으라는 표식은 없다")
+    void ssoRevokedLoginRejected() throws Exception {
+        when(tokenRevocationService.isSsoLoginRevoked("S1")).thenReturn(true);
+
+        MockHttpServletRequest request = bearer(ssoToken("access", "S1"));
+
+        assertThat(authenticated()).isFalse();
+        assertThat(loggedOutMarker(request)).as("이음에서 로그아웃한 것이 아니다 — 평범한 401").isNull();
+        verify(userService, never()).findUserById(anyString());
+    }
+
+    @Test
+    @DisplayName("SSO 가 끊은 로그인에서 나온 HR 토큰 - 인증을 세우지 않는다. 다른 로그인의 HR 토큰은 그대로 인증된다")
+    void hrTokenOfSsoRevokedLoginRejected() throws Exception {
+        when(tokenRevocationService.isSsoLoginRevoked("S1")).thenReturn(true);
+        MockHttpServletRequest revoked = new MockHttpServletRequest("GET", "/api/v1/users");
+        revoked.setCookies(new Cookie("hr_access_token",
+                provider.createHrAccessToken(user, List.of("ROLE_USER"), List.of(), false, "S1")));
+        run(revoked);
+        assertThat(authenticated()).isFalse();
+
+        SecurityContextHolder.clearContext();
+        MockHttpServletRequest other = new MockHttpServletRequest("GET", "/api/v1/users");
+        other.setCookies(new Cookie("hr_access_token",
+                provider.createHrAccessToken(user, List.of("ROLE_USER"), List.of(), false, "S2")));
+        run(other);
+        assertThat(authenticated()).isTrue();
     }
 
     @Test

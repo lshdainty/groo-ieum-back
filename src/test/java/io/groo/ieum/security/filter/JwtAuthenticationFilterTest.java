@@ -243,6 +243,22 @@ class JwtAuthenticationFilterTest {
         }
 
         @Test
+        @DisplayName("보안 점검 CLI-6 - SSO 가 끊은 로그인에서 나온 토큰은 인증되지 않고, 갱신 쿠키도 받지 못한다")
+        void ssoLoginRevokedTokenRejected() throws Exception {
+            given(jwtTokenProvider.getSsoSidFromHrToken(TOKEN)).willReturn("sid-1");
+            given(tokenRevocationService.isSsoLoginRevoked("sid-1")).willReturn(true);
+            // 갱신 구간(잔여 5분)이어도 새 토큰을 받지 못한다 — 차단을 먼저 본다
+            lenient().when(jwtTokenProvider.getRemainingExpiration(TOKEN)).thenReturn(300_000L);
+
+            MockHttpServletResponse response = runFilter();
+
+            assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+            assertThat(response.getHeaders("Set-Cookie")).isEmpty();
+            org.mockito.Mockito.verify(jwtTokenProvider, org.mockito.Mockito.never()).createHrAccessToken(any(), any(),
+                    any(), any(), anyList(), anyList(), org.mockito.ArgumentMatchers.anyBoolean(), any(), any());
+        }
+
+        @Test
         @DisplayName("성공 - jti 없는 옛 토큰은 차단 목록을 보지 않고 만료까지 허용한다")
         void tokenWithoutJtiAllowed() throws Exception {
             given(jwtTokenProvider.getHrJti(TOKEN)).willReturn(null);

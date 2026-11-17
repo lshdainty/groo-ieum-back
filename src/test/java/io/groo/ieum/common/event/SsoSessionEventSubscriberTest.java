@@ -31,7 +31,8 @@ import static org.mockito.Mockito.verify;
 class SsoSessionEventSubscriberTest {
 
     /** 발행 쪽(groo-sso-back SessionEvent)과 같은 모양 — 발행 쪽 ObjectMapper(JsonMapper 기본값)로 직렬화한 글을 흉내 낸다 */
-    record PublishedSessionEvent(String type, Long ssoUserRowId, String reason, LocalDateTime timestamp) {}
+    record PublishedSessionEvent(String type, Long ssoUserRowId, String sessionId, String reason,
+                                 LocalDateTime timestamp) {}
 
     private final UserRepository userRepository = mock(UserRepository.class);
     private final TokenRevocationService tokenRevocationService = mock(TokenRevocationService.class);
@@ -41,7 +42,15 @@ class SsoSessionEventSubscriberTest {
 
     private static String published(String type, Long ssoUserRowId) {
         return JsonMapper.builder().build().writeValueAsString(
-                new PublishedSessionEvent(type, ssoUserRowId, "PASSWORD_CHANGED", LocalDateTime.now(ZoneOffset.UTC)));
+                new PublishedSessionEvent(type, ssoUserRowId, null, "PASSWORD_CHANGED",
+                        LocalDateTime.now(ZoneOffset.UTC)));
+    }
+
+    /** 로그인 한 건 폐기(CLI-6) — 발행 쪽은 계열 번호(sessionId)를 싣고, 사용자 번호는 모르면 비운다 */
+    private static String publishedRevoked(String sessionId, Long ssoUserRowId) {
+        return JsonMapper.builder().build().writeValueAsString(
+                new PublishedSessionEvent("SESSION_REVOKED", ssoUserRowId, sessionId, "logout",
+                        LocalDateTime.now(ZoneOffset.UTC)));
     }
 
     private static User user(String id, Long ssoUserRowId) {
@@ -57,6 +66,28 @@ class SsoSessionEventSubscriberTest {
         subscriber.handleSessionEvent(published("SESSION_REVOKED_ALL", 42L));
 
         verify(tokenRevocationService).revokeAllForUser("kim");
+    }
+
+    @Test
+    @DisplayName("SESSION_REVOKED - 그 SSO 로그인 번호에서 나온 토큰만 끊는다. 사용자 전체는 끊지 않는다(CLI-6)")
+    void revokedCutsOnlyThatSsoLogin() {
+        subscriber.handleSessionEvent(publishedRevoked("sid-1", 42L));
+
+        verify(tokenRevocationService).revokeSsoLogin("sid-1");
+        verify(tokenRevocationService, never()).revokeAllForUser(anyString());
+        // 로그인 번호 하나로 대조한다 — 사용자를 찾지 않는다(이음을 안 쓰는 사람의 로그인이어도 적어 둘 뿐이다)
+        verify(userRepository, never()).findBySsoUserRowId(any());
+    }
+
+    @Test
+    @DisplayName("SESSION_REVOKED - 사용자 번호가 비어 있어도 끊는다. 로그인 번호가 없으면 아무것도 하지 않는다")
+    void revokedNeedsOnlySessionId() {
+        subscriber.handleSessionEvent(publishedRevoked("sid-2", null));
+        subscriber.handleSessionEvent(publishedRevoked(null, 42L));
+        subscriber.handleSessionEvent(publishedRevoked(" ", 42L));
+
+        verify(tokenRevocationService).revokeSsoLogin("sid-2");
+        verify(tokenRevocationService, org.mockito.Mockito.times(1)).revokeSsoLogin(anyString());
     }
 
     @Test

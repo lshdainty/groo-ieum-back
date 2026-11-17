@@ -111,4 +111,43 @@ class TokenRevocationServiceTest {
         when(ops.get("ieum:revoked-user:u3")).thenThrow(new RuntimeException("redis down"));
         assertThat(service.isUserRevoked("u3", new java.util.Date())).isFalse();
     }
+
+    @Test
+    @DisplayName("CLI-6 revokeSsoLogin - 그 SSO 로그인 번호를 하루 동안 적어 둔다")
+    void revokeSsoLoginWrites() {
+        when(redis.opsForValue()).thenReturn(ops);
+
+        service.revokeSsoLogin("sid-1");
+
+        verify(ops).set("ieum:revoked-sso-sid:sid-1", "1", TokenRevocationService.SSO_LOGIN_RETENTION);
+        assertThat(TokenRevocationService.SSO_LOGIN_RETENTION)
+                .as("그 로그인의 HR 토큰 · SSO 토큰(각 1시간 안팎)이 전부 만료될 때까지는 남아 있어야 한다")
+                .isGreaterThanOrEqualTo(java.time.Duration.ofMillis(jwtProperties.getHrAccessExpiration()));
+    }
+
+    @Test
+    @DisplayName("CLI-6 revokeSsoLogin - 번호가 없으면 쓰지 않고, Redis 장애는 예외를 올리지 않는다")
+    void revokeSsoLoginBlankOrFailure() {
+        service.revokeSsoLogin(null);
+        service.revokeSsoLogin(" ");
+        verify(redis, org.mockito.Mockito.never()).opsForValue();
+
+        when(redis.opsForValue()).thenThrow(new RuntimeException("redis down"));
+        org.assertj.core.api.Assertions.assertThatCode(() -> service.revokeSsoLogin("sid-1")).doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("CLI-6 isSsoLoginRevoked - 적힌 번호는 true, 없는 번호 · 번호 없는 토큰은 false, Redis 장애는 fail-open")
+    void isSsoLoginRevoked() {
+        when(redis.hasKey("ieum:revoked-sso-sid:sid-1")).thenReturn(true);
+        when(redis.hasKey("ieum:revoked-sso-sid:sid-2")).thenReturn(false);
+
+        assertThat(service.isSsoLoginRevoked("sid-1")).isTrue();
+        assertThat(service.isSsoLoginRevoked("sid-2")).isFalse();
+        assertThat(service.isSsoLoginRevoked(null)).isFalse();
+        assertThat(service.isSsoLoginRevoked(" ")).isFalse();
+
+        when(redis.hasKey(anyString())).thenThrow(new RuntimeException("redis down"));
+        assertThat(service.isSsoLoginRevoked("sid-1")).isFalse();
+    }
 }
