@@ -202,6 +202,12 @@ management:
     web:
       exposure:
         include: prometheus, health, info
+  # 헬스 응답에 메일 서버 확인을 넣지 않는다(보안 점검 INF-16). 켜 두면 헬스체크가 돌 때마다 메일 서버에 로그인하고,
+  # 메일 키가 죽거나 메일 서버에 장애가 나면 서비스가 멀쩡해도 헬스가 503 이 된다 — 컨테이너가 unhealthy 로 뜨고
+  # 배포의 헬스 대기가 실패해 급한 수정도 나가지 못한다. 메일 발송 자체는 그대로다.
+  health:
+    mail:
+      enabled: false
   # info 엔드포인트에서 info.* 프로퍼티(APP_VERSION 등)를 노출하려면 필요
   info:
     env:
