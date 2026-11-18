@@ -469,21 +469,29 @@ public class VacationServiceImpl implements VacationService {
         List<VacationUsage> usages = vacationUsageRepository.findByUserIdAndPeriodWithUser(userId, startDate, endDate);
 
         // 월별 사용량 Map 생성 및 0 초기화 (순서 보장위해 LinkedHashMap 사용)
-        Map<Integer, BigDecimal> monthlyMap = new LinkedHashMap<>();
+        // 오늘까지 쓴 것(usedTime)과 오늘 뒤에 잡힌 것(expectUsedTime — 예정)을 나눈다(groo-design chart.md "미리 잡는 일정의 값은 예외")
+        Map<Integer, BigDecimal> usedMap = new LinkedHashMap<>();
+        Map<Integer, BigDecimal> expectMap = new LinkedHashMap<>();
         for (int i = 1; i <= 12; i++) {
-            monthlyMap.put(i, BigDecimal.ZERO);
+            usedMap.put(i, BigDecimal.ZERO);
+            expectMap.put(i, BigDecimal.ZERO);
         }
+
+        // [userClock] 오늘 — 회사 기준 날짜. 오늘 시작한 휴가는 쓴 것이다(휴가 현황 요약이 오늘 23:59:59 를 기준으로 쓴 · 예정을 가르는 것과 같다)
+        LocalDate today = companyClock.today();
 
         // 월별 사용량 집계 (startDate의 월 기준)
         for (VacationUsage usage : usages) {
             int month = usage.getStartDate().getMonthValue();
-            monthlyMap.merge(month, usage.getUsedTime(), BigDecimal::add);
+            Map<Integer, BigDecimal> target = usage.getStartDate().toLocalDate().isAfter(today) ? expectMap : usedMap;
+            target.merge(month, usage.getUsedTime(), BigDecimal::add);
         }
 
-        return monthlyMap.entrySet().stream()
+        return usedMap.entrySet().stream()
                 .map(e -> VacationServiceDto.builder()
                             .month(e.getKey())
                             .usedTime(e.getValue())
+                            .expectUsedTime(expectMap.get(e.getKey()))
                             .build()
                 )
                 .toList();

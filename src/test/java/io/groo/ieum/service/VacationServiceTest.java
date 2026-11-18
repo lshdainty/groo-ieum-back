@@ -921,6 +921,63 @@ class VacationServiceTest {
             assertThat(result.get(0).getMonth()).isEqualTo(1);
             assertThat(result.get(11).getMonth()).isEqualTo(12);
         }
+
+        @Test
+        @DisplayName("성공 - 오늘(회사 기준 날짜)까지 쓴 것과 오늘 뒤 예정을 달마다 나눈다 — 오늘 시작한 휴가는 쓴 것")
+        void splitsUsedAndScheduledByCompanyToday() {
+            // given — 오늘 2025-11-18(회사 기준)
+            String userId = "user1";
+            String year = "2025";
+            User user = createTestUser(userId);
+            doReturn(LocalDate.of(2025, 11, 18)).when(companyClock).today();
+            given(userService.checkUserExist(userId)).willReturn(user);
+            given(vacationUsageRepository.findByUserIdAndPeriodWithUser(eq(userId), any(), any()))
+                    .willReturn(List.of(
+                            usageOn(user, LocalDateTime.of(2025, 3, 2, 9, 0), "1.0000"),
+                            usageOn(user, LocalDateTime.of(2025, 11, 10, 9, 0), "1.0000"),
+                            // 오늘 오후 — 아직 시작 전이어도 오늘 것이라 쓴 것(요약의 기준 오늘 23:59:59 와 같다)
+                            usageOn(user, LocalDateTime.of(2025, 11, 18, 14, 0), "0.5000"),
+                            usageOn(user, LocalDateTime.of(2025, 11, 19, 9, 0), "1.0000"),
+                            usageOn(user, LocalDateTime.of(2025, 12, 24, 9, 0), "2.0000")));
+
+            // when
+            List<VacationServiceDto> result = vacationService.getUserMonthlyVacationStats(userId, year);
+
+            // then
+            assertThat(result.get(2).getUsedTime()).isEqualByComparingTo("1");
+            assertThat(result.get(2).getExpectUsedTime()).isEqualByComparingTo("0");
+            assertThat(result.get(10).getUsedTime()).isEqualByComparingTo("1.5");
+            assertThat(result.get(10).getExpectUsedTime()).isEqualByComparingTo("1");
+            assertThat(result.get(11).getUsedTime()).isEqualByComparingTo("0");
+            assertThat(result.get(11).getExpectUsedTime()).isEqualByComparingTo("2");
+            // 쓴 것도 예정도 없는 달은 둘 다 0
+            assertThat(result.get(0).getUsedTime()).isEqualByComparingTo("0");
+            assertThat(result.get(0).getExpectUsedTime()).isEqualByComparingTo("0");
+        }
+
+        @Test
+        @DisplayName("성공 - 다음 해는 전부 예정이다")
+        void nextYearIsAllScheduled() {
+            // given — 오늘 2025-11-18, 2026 년을 본다
+            String userId = "user1";
+            User user = createTestUser(userId);
+            doReturn(LocalDate.of(2025, 11, 18)).when(companyClock).today();
+            given(userService.checkUserExist(userId)).willReturn(user);
+            given(vacationUsageRepository.findByUserIdAndPeriodWithUser(eq(userId), any(), any()))
+                    .willReturn(List.of(usageOn(user, LocalDateTime.of(2026, 1, 2, 9, 0), "1.0000")));
+
+            // when
+            List<VacationServiceDto> result = vacationService.getUserMonthlyVacationStats(userId, "2026");
+
+            // then
+            assertThat(result.get(0).getUsedTime()).isEqualByComparingTo("0");
+            assertThat(result.get(0).getExpectUsedTime()).isEqualByComparingTo("1");
+        }
+
+        private VacationUsage usageOn(User user, LocalDateTime start, String usedTime) {
+            return VacationUsage.createVacationUsage(
+                    user, "연차", VacationTimeType.DAYOFF, start, start.plusHours(9), new BigDecimal(usedTime));
+        }
     }
 
     @Nested
