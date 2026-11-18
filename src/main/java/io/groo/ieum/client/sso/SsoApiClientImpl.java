@@ -1,8 +1,11 @@
 package io.groo.ieum.client.sso;
 
 import io.groo.core.controller.ApiResponse;
+import io.groo.core.exception.ErrorCode;
 import io.groo.core.exception.ExternalServiceException;
+import io.groo.core.exception.ForbiddenException;
 import io.groo.core.exception.InvalidValueException;
+import io.groo.core.exception.UnauthorizedException;
 import io.groo.ieum.client.sso.dto.SsoInvitationStatusRequest;
 import io.groo.ieum.client.sso.dto.SsoInvitationStatusResponse;
 import io.groo.ieum.client.sso.dto.SsoInviteRequest;
@@ -218,7 +221,25 @@ public class SsoApiClientImpl implements SsoApiClient {
             log.info("SSO /oauth2/token success");
             return body.getData().getAccessToken();
 
+        } catch (HttpClientErrorException e) {
+            // SSO 가 이 교환을 거절했다 — 틀렸거나 이미 쓴 인가 코드 · PKCE 불일치(400), 비활성 계정 · 이음 접근 없음(403).
+            // 요청한 쪽의 문제이지 SSO 장애가 아니다. 502 와 ERROR(스택 포함)로 남기면 로그인하지 않은 누구나
+            // 이 주소를 두드려 오류 로그와 장애 경보를 늘릴 수 있다(보안 점검 IEU-9). 4xx 로 답하고 WARN 한 줄만 남긴다.
+            // SSO 의 응답 문구는 싣지 않는다.
+            int status = e.getStatusCode().value();
+            if (status == 400 || status == 401) {
+                log.warn("SSO /oauth2/token 이 인가 코드 교환을 거절했다: status={}", status);
+                throw new UnauthorizedException(ErrorCode.UNAUTHORIZED, "Invalid authorization code");
+            }
+            if (status == 403) {
+                log.warn("SSO /oauth2/token 이 이 계정의 교환을 거절했다: status={}", status);
+                throw new ForbiddenException(HrErrorCode.PERMISSION_DENIED, "HR service access denied");
+            }
+            // 그 밖의 4xx(클라이언트 미등록 404 등)는 이음 설정이 SSO 와 어긋난 것이다 — 운영자가 알아야 하는 장애로 둔다.
+            log.error("SSO /oauth2/token API failed: {}", e.getMessage(), e);
+            throw new ExternalServiceException(HrErrorCode.SSO_SERVICE_ERROR, "SSO 토큰 교환 실패", e);
         } catch (RestClientException e) {
+            // SSO 가 응답하지 않거나 5xx — 진짜 장애다.
             log.error("SSO /oauth2/token API failed: {}", e.getMessage(), e);
             throw new ExternalServiceException(HrErrorCode.SSO_SERVICE_ERROR, "SSO 토큰 교환 실패", e);
         }
