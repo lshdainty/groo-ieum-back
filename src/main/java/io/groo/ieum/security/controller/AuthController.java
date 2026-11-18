@@ -4,6 +4,7 @@ import io.groo.core.controller.ApiResponse;
 import io.groo.core.exception.ErrorCode;
 import io.groo.core.exception.UnauthorizedException;
 import io.groo.core.type.YNType;
+import io.groo.ieum.common.time.CompanyClock;
 import io.groo.ieum.security.controller.dto.AuthApiDto;
 import io.groo.ieum.security.principal.UserPrincipal;
 import io.groo.ieum.user.domain.User;
@@ -29,6 +30,7 @@ import org.springframework.web.bind.annotation.*;
 @Tag(name = "Auth", description = "인증/보안 API")
 public class AuthController implements AuthApi {
     private final UserService userService;
+    private final CompanyClock companyClock;
 
     @Override
     public ApiResponse<AuthApiDto.LoginUserInfo> getUserInfo() {
@@ -80,7 +82,9 @@ public class AuthController implements AuthApi {
                 YNType.Y,
                 StringUtils.hasText(user.getProfileName()) && StringUtils.hasText(user.getProfileUUID()) ?
                         userService.generateProfileUrl(user.getProfileName(), user.getProfileUUID()) : null,
-                userPrincipal.isPasswordChangeRequired() ? YNType.Y : YNType.N  // 비밀번호 변경 필요 여부 (SSO 토큰 클레임 → HR 토큰 클레임)
+                userPrincipal.isPasswordChangeRequired() ? YNType.Y : YNType.N,  // 비밀번호 변경 필요 여부 (SSO 토큰 클레임 → HR 토큰 클레임)
+                // [userClock] 회사 기준 타임존(IANA ID) — 웹이 "회사 오늘" 을 서버와 같은 시계로 센다(휴가 차트의 해 고르기 · 기본 연도)
+                companyClock.zone().getId()
         );
 
         return ApiResponse.success(result);

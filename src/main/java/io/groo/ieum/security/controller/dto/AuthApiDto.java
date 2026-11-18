@@ -23,6 +23,11 @@ public class AuthApiDto {
         private YNType isLogin;
         private String profileUrl;
         private YNType passwordChangeRequired; // 비밀번호 변경 필요 여부 (토큰 pwdChange 클레임)
+        /**
+         * 회사 기준 타임존(IANA ID, 예: "Asia/Seoul") — 서버가 날짜를 셀 때 쓰는 {@code CompanyClock.zone()} 그대로다(회사 미설정이면
+         * 서비스 기준). 웹은 이 타임존으로 "회사 오늘" 을 센다 — 쓴 휴가 · 예정을 가르는 서버의 오늘과 같은 시계(groo-design chart.md)
+         */
+        private String companyTimezone;
     }
 
     @Getter

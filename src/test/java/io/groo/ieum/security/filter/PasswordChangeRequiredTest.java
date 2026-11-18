@@ -241,7 +241,9 @@ class PasswordChangeRequiredTest {
     @Test
     @DisplayName("로그인 확인 응답 - 인증 객체의 표식을 password_change_required 로 내려준다")
     void loginCheckReflectsMarker() {
-        io.groo.ieum.security.controller.AuthController ctl = new io.groo.ieum.security.controller.AuthController(userService);
+        io.groo.ieum.security.controller.AuthController ctl = new io.groo.ieum.security.controller.AuthController(userService,
+                new io.groo.ieum.common.time.CompanyClock(mock(io.groo.ieum.company.repository.CompanyRepository.class),
+                        new io.groo.core.time.ServiceClock("Asia/Seoul")));
         for (boolean marked : new boolean[]{true, false}) {
             setPrincipal(marked);
             var info = ctl.getUserInfo().getData();
