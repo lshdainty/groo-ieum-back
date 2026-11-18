@@ -225,8 +225,12 @@ public class VacationApiDto {
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public static class GetUserMonthlyVacationStatsResp {
         private Integer month;
+        /** 그 달에 오늘(회사 기준 날짜)까지 쓴 휴가 */
         private BigDecimal usedTime;
         private String usedTimeStr;
+        /** 그 달에 오늘 뒤로 잡힌 휴가(예정) */
+        private BigDecimal expectUsedTime;
+        private String expectUsedTimeStr;
     }
 
     @Getter

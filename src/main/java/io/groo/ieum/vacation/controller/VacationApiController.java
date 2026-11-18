@@ -274,7 +274,9 @@ public class VacationApiController implements VacationApi {
                 .map(v -> new VacationApiDto.GetUserMonthlyVacationStatsResp(
                         v.getMonth(),
                         v.getUsedTime(),
-                        vacationTimeFormatter.format(v.getUsedTime())
+                        vacationTimeFormatter.format(v.getUsedTime()),
+                        v.getExpectUsedTime(),
+                        vacationTimeFormatter.format(v.getExpectUsedTime())
                 ))
                 .toList();
 
